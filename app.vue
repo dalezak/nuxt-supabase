@@ -1,5 +1,5 @@
 <template>
   <div>
-    <NuxtWelcome />
+    <h1>Nuxt Layer Supabase</h1>
   </div>
 </template>

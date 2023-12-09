@@ -1,75 +1,78 @@
-# Nuxt 3 Minimal Starter
+# Nuxt Layer Supabase
 
 Look at the [Nuxt 3 documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
 
-## Setup
+## NPM
 
-Make sure to install the dependencies:
+Install packages
 
 ```bash
-# npm
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
 ```
 
-## Development Server
+## Development
 
-Start the development server on `http://localhost:3000`:
+Local environment on `http://localhost:3000`
 
 ```bash
-# npm
-npm run dev
+npm run dev -- -o --dotenv .env.local
+```
 
-# pnpm
-pnpm run dev
+Production environment
 
-# yarn
-yarn dev
-
-# bun
-bun run dev
+```bash
+npm run dev -- -o --dotenv .env.prod
 ```
 
 ## Production
 
-Build the application for production:
+Production build
 
 ```bash
-# npm
 npm run build
-
-# pnpm
-pnpm run build
-
-# yarn
-yarn build
-
-# bun
-bun run build
 ```
 
-Locally preview production build:
+## Clean
+
+Clean cache
 
 ```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm run preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
+npx nuxi cleanup
 ```
 
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+## Supabase
+
+Container start on `http://localhost:54323`
+
+```bash
+supabase start
+```
+
+Container stop
+```bash
+supabase stop
+```
+
+Database migrate
+
+```bash
+supabase db diff --use-migra -f file_name
+```
+
+Database reset
+
+```bash
+supabase db reset
+```
+
+Database seed
+
+```bash
+npx snaplet generate --sql > supabase/seed.sql
+```
+
+Database push
+
+```bash
+supabase db push
+```
