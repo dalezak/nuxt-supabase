@@ -11,7 +11,7 @@ export class Storage {
   }
 
   constructor(name=null) {
-    console.log("services/storage", process.client ? "client" : "server")
+    console.log("utils/storage", process.client ? "client" : "server")
     if (process.client) {
       localForage.config({
         driver: [
