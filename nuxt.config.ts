@@ -11,9 +11,6 @@ export default defineNuxtConfig({
     '@nuxtjs/supabase',
     '@vue-macros/nuxt'
   ],
-  plugins: [
-    '@/plugins/storage.js'
-  ],
   runtimeConfig: {
     public: {
       url: process.env.APP_URL,
