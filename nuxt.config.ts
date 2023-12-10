@@ -1,5 +1,9 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import packageJson from './package.json';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+const fileUrl = fileURLToPath(import.meta.url);
+const currentDir = dirname(fileUrl);
 export default defineNuxtConfig({
   ssr: true,
   debug: true,
@@ -10,6 +14,9 @@ export default defineNuxtConfig({
     '@pinia/nuxt',
     '@nuxtjs/supabase',
     '@vue-macros/nuxt'
+  ],
+  plugins: [
+    join(currentDir, './plugins/storage.js')
   ],
   runtimeConfig: {
     public: {
@@ -27,7 +34,7 @@ export default defineNuxtConfig({
     redirect: false,
     redirectOptions: {
       login: '/login',
-      callback: '/confirm',
+      callback: '/',
       exclude: [],
     }
   },
