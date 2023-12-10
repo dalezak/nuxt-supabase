@@ -16,7 +16,7 @@ export default defineNuxtConfig({
     '@vue-macros/nuxt'
   ],
   plugins: [
-    join(currentDir, './plugins/storage.js')
+    // join(currentDir, './plugins/storage.js')
   ],
   runtimeConfig: {
     public: {
