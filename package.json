@@ -14,7 +14,6 @@
     "@nuxt/devtools": "latest",
     "@nuxtjs/supabase": "^1.1.4",
     "@snaplet/copycat": "^1.1.0-rc.1",
-    "@vue-macros/nuxt": "^1.9.7",
     "eslint-plugin-vue": "^9.19.2",
     "nuxt": "^3.8.2",
     "vue": "^3.3.10",

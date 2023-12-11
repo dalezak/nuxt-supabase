@@ -12,11 +12,10 @@ export default defineNuxtConfig({
   },
   modules: [
     '@pinia/nuxt',
-    '@nuxtjs/supabase',
-    '@vue-macros/nuxt'
+    '@nuxtjs/supabase'
   ],
   plugins: [
-    // join(currentDir, './plugins/storage.js')
+    join(currentDir, './plugins/storage.js')
   ],
   runtimeConfig: {
     public: {
