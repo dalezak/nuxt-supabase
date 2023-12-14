@@ -17,6 +17,12 @@ export default defineNuxtConfig({
   plugins: [
     join(currentDir, './plugins/storage.js')
   ],
+  imports: {
+    dirs: [
+      'models', 
+      'stores'
+    ]
+  },
   runtimeConfig: {
     public: {
       url: process.env.APP_URL,

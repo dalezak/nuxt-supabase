@@ -1,7 +1,12 @@
-import * as localForage from "localforage";
+// import * as localForage from "localforage";
+import { createStorage } from "unstorage";
+import localStorageDriver from "unstorage/drivers/localstorage";
+
 export class Storage {
 
   static _instance;
+
+  unstorage;
 
   static instance() {
     if (!this._instance) {
@@ -13,31 +18,34 @@ export class Storage {
   constructor(name=null) {
     console.log("utils/storage", process.client ? "client" : "server")
     if (process.client) {
-      localForage.config({
-        driver: [
-          localForage.INDEXEDDB,
-          localForage.WEBSQL,
-          localForage.LOCALSTORAGE
-        ],
-        name: name || this.configAppName()
+      this.unstorage = createStorage({
+        driver: localStorageDriver()
       });
+      // this.unstorage.config({
+      //   driver: [
+      //     this.unstorage.INDEXEDDB,
+      //     this.unstorage.WEBSQL,
+      //     this.unstorage.LOCALSTORAGE
+      //   ],
+      //   name: name || this.configAppName()
+      // });
     }
   }
 
   async keys(prefix = null) {
     if (process.client) {
-      if (prefix && prefix.length > 0) {
-        let keys = await localForage.keys();
-        return keys.filter(key => key.startsWith(prefix));
-      }
-      return await localForage.keys();
+      // if (prefix && prefix.length > 0) {
+      //   let keys = await this.unstorage.getKeys();
+      //   return keys.filter(key => key.startsWith(prefix));
+      // }
+      return await this.unstorage.getKeys(prefix);
     }
     return [];
   }
 
   async get(key) {
     if (process.client) {
-      return await localForage.getItem(key);
+      return await this.unstorage.getItem(key);
     }
     return null;
   }
@@ -45,9 +53,9 @@ export class Storage {
   async set(key, value) {
     if (process.client) {
       if (value) {
-        return await localForage.setItem(key, value);
+        return await this.unstorage.setItem(key, value);
       }
-      return await localForage.setItem(key, null);
+      return await this.unstorage.setItem(key, null);
     }
     return null;
   }
@@ -139,7 +147,7 @@ export class Storage {
 
   async remove(key) {
     if (process.client) {
-      return await localForage.removeItem(key);
+      return await this.unstorage.removeItem(key);
     }
     return null;
   }
@@ -149,11 +157,11 @@ export class Storage {
       if (prefix && prefix.length > 0) {
         let keys = await this.keys(prefix);
         for (let key of keys) {
-          await localForage.removeItem(key);
+          await this.unstorage.removeItem(key);
         }
         return true;
       }
-      return await localForage.clear();
+      return await this.unstorage.clear();
     }
     return null;
   }
