@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@pinia/nuxt": "^0.5.1",
-    "localforage": "^1.10.0",
+    "idb-keyval": "^6.2.1",
     "pinia": "^2.1.7",
     "unstorage": "^1.10.1"
   }

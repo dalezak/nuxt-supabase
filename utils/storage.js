@@ -1,5 +1,5 @@
-// import * as localForage from "localforage";
 import { createStorage } from "unstorage";
+import indexedDbDriver from "unstorage/drivers/indexedb";
 import localStorageDriver from "unstorage/drivers/localstorage";
 
 export class Storage {
@@ -18,26 +18,24 @@ export class Storage {
   constructor(name=null) {
     console.log("utils/storage", process.client ? "client" : "server")
     if (process.client) {
-      this.unstorage = createStorage({
-        driver: localStorageDriver()
-      });
-      // this.unstorage.config({
-      //   driver: [
-      //     this.unstorage.INDEXEDDB,
-      //     this.unstorage.WEBSQL,
-      //     this.unstorage.LOCALSTORAGE
-      //   ],
-      //   name: name || this.configAppName()
-      // });
+      try {
+        this.unstorage = createStorage({
+          driver: indexedDbDriver({
+            storeName: name || this.configAppName()
+          })
+        });
+      }
+      catch (error) {
+        console.error("utils/storage", error);
+        this.unstorage = createStorage({
+          driver: localStorageDriver()
+        });
+      }
     }
   }
 
   async keys(prefix = null) {
     if (process.client) {
-      // if (prefix && prefix.length > 0) {
-      //   let keys = await this.unstorage.getKeys();
-      //   return keys.filter(key => key.startsWith(prefix));
-      // }
       return await this.unstorage.getKeys(prefix);
     }
     return [];
@@ -63,7 +61,7 @@ export class Storage {
   async count(prefix, needle = "", haystack = null) {
     if (process.client) {
       let counts = 0;
-      let keys = await this.keys(prefix);
+      let keys = await this.unstorage.getKeys(prefix);
       let search = needle && needle.length > 0 ? needle.toLowerCase() : "";
       for (let key of keys) {
         const item = await this.get(key);
@@ -104,7 +102,7 @@ export class Storage {
   async search(prefix, needle = "", haystack = null, offset = 0, limit = 100, sort = null) {
     if (process.client) {
       let results = [];
-      let keys = await this.keys(prefix);
+      let keys = await this.unstorage.getKeys(prefix);
       let search = needle && needle.length > 0 ? needle.toLowerCase() : "";
       for (let key of keys) {
         const item = await this.get(key);
@@ -155,7 +153,7 @@ export class Storage {
   async clear(prefix = null) {
     if (process.client) {
       if (prefix && prefix.length > 0) {
-        let keys = await this.keys(prefix);
+        let keys = await this.unstorage.getKeys(prefix);
         for (let key of keys) {
           await this.unstorage.removeItem(key);
         }
