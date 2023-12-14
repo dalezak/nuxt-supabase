@@ -7,9 +7,8 @@
 <script setup>
 const storage = useStorage();
 onMounted(async () => {
-  console.log('mounted')
-  storage.set("test", "test");
-  let test = await storage.get("test");
-  console.log("test", test);
+  storage.set("supabase", "supabase");
+  let test = await storage.get("supabase");
+  console.log("onMounted supabase", test);
 })
 </script>
