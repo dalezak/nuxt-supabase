@@ -14,15 +14,11 @@ export default defineNuxtConfig({
     '@pinia/nuxt',
     '@nuxtjs/supabase'
   ],
-  plugins: [
-    join(currentDir, './plugins/storage.js')
-  ],
-  // imports: {
-  //   dirs: [
-  //     'models', 
-  //     'stores'
-  //   ]
-  // },
+  imports: {
+    dirs: [
+      join(currentDir, '/models'), 
+    ]
+  },
   runtimeConfig: {
     public: {
       url: process.env.APP_URL,
