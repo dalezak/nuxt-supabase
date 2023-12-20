@@ -16,7 +16,7 @@ export default defineNuxtConfig({
   ],
   imports: {
     dirs: [
-      join(currentDir, '/models'), 
+      join(currentDir, './models'), 
     ]
   },
   runtimeConfig: {

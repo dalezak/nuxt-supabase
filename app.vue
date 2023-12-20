@@ -5,4 +5,7 @@
 </template>
 
 <script setup>
+onMounted(async () => {
+  console.log("onMounted supabase", process.client ? "client" : "server");
+})
 </script>
