@@ -37,11 +37,11 @@ export default class User extends SupaModel {
       provider: 'google' 
     });
     if (error) {
-      console.error("User.google", error);
+      consoleError("User.google", error);
       return null;
     }
     else if (auth && auth.user) {
-      console.log("User.google", auth);
+      consoleLog("User.google", auth);
       let user = new User();
       user.id = auth.user.id;
       user.email = auth.user.email;
@@ -59,11 +59,11 @@ export default class User extends SupaModel {
       password: password 
     });
     if (error) {
-      console.error("User.login", error);
+      consoleError("User.login", error);
       return null;
     }
     else if (auth && auth.user) {
-      console.log("User.login", auth);
+      consoleLog("User.login", auth);
       let user = new User();
       user.id = auth.user.id;
       user.email = auth.user.email;
@@ -81,11 +81,11 @@ export default class User extends SupaModel {
       password: password 
     });
     if (error) {
-      console.error("User.signup", error);
+      consoleError("User.signup", error);
       return null;
     }
     else if (auth && auth.user) {
-      console.log("User.signup", auth);
+      consoleLog("User.signup", auth);
       let user = new User();
       user.id = auth.user.id;
       user.email = auth.user.email;
@@ -107,7 +107,7 @@ export default class User extends SupaModel {
       return true;
     }
     catch (error){
-      console.error("User.logout", error);
+      consoleError("User.logout", error);
       return false;
     }
   }
@@ -118,11 +118,11 @@ export default class User extends SupaModel {
       redirectTo: `${process.env.APP_URL}/reset?email=${email}`,
     });
     if (error) {
-      console.error("User.resetPassword", error);
+      consoleError("User.resetPassword", error);
       return false;
     }
     else if (data) {
-      console.log("User.resetPassword", data);
+      consoleLog("User.resetPassword", data);
       return true;
     }
     return false;
@@ -132,11 +132,11 @@ export default class User extends SupaModel {
     const Supabase = useSupabaseClient();
     const { data, error } = await Supabase.auth.updateUser({ password: password });
     if (error) {
-      console.error("User.updatePassword", error);
+      consoleError("User.updatePassword", error);
       return false;
     }
     else if (data) {
-      console.log("User.updatePassword", data);
+      consoleLog("User.updatePassword", data);
       return true;
     }
     return false;

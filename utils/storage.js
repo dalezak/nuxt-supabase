@@ -16,7 +16,7 @@ export class Storage {
   }
 
   constructor(name=null) {
-    console.log("utils/storage", process.client ? "client" : "server")
+    consoleLog("utils/storage", process.client ? "client" : "server")
     if (process.client) {
       try {
         this.unstorage = createStorage({
@@ -26,7 +26,7 @@ export class Storage {
         });
       }
       catch (error) {
-        console.error("utils/storage", error);
+        consoleError("utils/storage", error);
         this.unstorage = createStorage({
           driver: localStorageDriver()
         });

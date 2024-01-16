@@ -28,7 +28,7 @@ export default class SupaModel extends Model {
     let { data: row, error } = await query.single();
     if (error) {
       if (error.code != "PGRST116") {
-        console.error("SupaModel.loadModel", error);
+        consoleError("SupaModel.loadModel", error);
       }
       return null;
     }    
@@ -50,7 +50,7 @@ export default class SupaModel extends Model {
       }
       const { data, error } = await query.select()
       if (error) {
-        console.error("SupaModel.saveModel", error);
+        consoleError("SupaModel.saveModel", error);
       }    
       else if (data) {
         console.info("SupaModel.saveModel", data.at(0));
@@ -62,7 +62,7 @@ export default class SupaModel extends Model {
     else {
       const { data: row, error } = await Supabase.from(table).insert(values).select()
       if (error) {
-        console.error("SupaModel.saveModel", error);
+        consoleError("SupaModel.saveModel", error);
       }    
       else if (row) {
         console.info("SupaModel.saveModel", row.at(0));
@@ -83,7 +83,7 @@ export default class SupaModel extends Model {
       }
       const { error } = await query.delete();
       if (error) {
-        console.log("SupaModel.deleteModel", error);
+        consoleLog("SupaModel.deleteModel", error);
         return false;
       }
       return true;
