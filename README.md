@@ -42,7 +42,7 @@ npm run build
 Clean cache
 
 ```bash
-npx nuxi cleanup
+npm run clean
 ```
 
 ## Supabase
