@@ -1,5 +1,6 @@
-export default async function (message, details="") {
+export default async function (message, ...args) {
   if (process.env.NODE_ENV === 'development') {
-    console.log(message, details);
+    var source = process.client ? "client" : "server";
+    console.log(message, args, source);
   }
 }
