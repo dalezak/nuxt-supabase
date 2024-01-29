@@ -6,6 +6,6 @@
 
 <script setup>
 onMounted(async () => {
-  consoleLog("onMounted supabase", process.client ? "client" : "server");
+  consoleLog("app", "onMounted", "supabase");
 })
 </script>
