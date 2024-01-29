@@ -6,6 +6,6 @@
 
 <script setup>
 onMounted(async () => {
-  consoleLog("app", "onMounted", "supabase");
+  consoleLog("app", "mounted", "supabase");
 })
 </script>
