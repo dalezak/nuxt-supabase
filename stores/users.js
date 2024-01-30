@@ -6,6 +6,7 @@ import User from "../models/User";
 export const useUserStore = defineStore("users", {
   state: () => {
     return {
+      current: null,
       user: null,
       users: null
     }
@@ -13,9 +14,46 @@ export const useUserStore = defineStore("users", {
   getters: {
     getUser(state) {
       return state.user;
+    },
+    getCurrent(state) {
+      return state.current;
+    },
+    getUsers(state) {
+      return state.users;
     }
   },
   actions: {
+    async currentUser() {
+      try {
+        if (this.current) {
+          return Promise.resolve(this.current);
+        }
+        else {
+          let user = await User.current();
+          if (user) {
+            await user.store();
+          }
+          this.current = user;
+          return Promise.resolve(user);
+        }
+      }
+      catch (error) {
+        return Promise.reject(error);
+      }
+    },
+    async loadUser({id}) {
+      try {
+        let user = await User.load(id);
+        if (user) {
+          await user.store();
+        }
+        this.user = user;
+        return Promise.resolve(user);
+      }
+      catch (error) {
+        return Promise.reject(error);
+      }
+    },
     async loadUsers({limit = 10, offset = 0, search = null}) {
       try {
         let users = await Users.load(limit, offset, search);
@@ -42,11 +80,11 @@ export const useUserStore = defineStore("users", {
         let user = await User.google();
         if (user) {
           user = await user.save();
-          user = await user.store(true);
+          user = await user.store();
           user = await User.load(user.id);
         }
-        this.user = user;
-        return Promise.resolve(user);
+        this.current = user;
+        return Promise.resolve(current);
       }
       catch (error) {
         consoleError("UserStore.googleSignin", error);
@@ -60,8 +98,8 @@ export const useUserStore = defineStore("users", {
         if (user) {
           await user.store();
         }
-        this.user = user;
-        return Promise.resolve(user);
+        this.current = user;
+        return Promise.resolve(current);
       }
       catch (error) {
         consoleError("UserStore.userLogin", error);
@@ -77,8 +115,8 @@ export const useUserStore = defineStore("users", {
           user = await user.save();
           user = await user.store();
         }
-        this.user = user;
-        return Promise.resolve(user);
+        this.current = user;
+        return Promise.resolve(current);
       }
       catch (error) {
         consoleError("UserStore.userSignup", error);
@@ -89,6 +127,8 @@ export const useUserStore = defineStore("users", {
       try {
         await User.logout();
         this.user = null;
+        this.current = null;
+        this.users = null;
         return Promise.resolve();
       }
       catch (error) {
