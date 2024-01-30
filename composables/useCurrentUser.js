@@ -1,9 +1,9 @@
-export function useCurrentUser() {
+export async function useCurrentUser() {
   const userStore = useUserStore();
   const { getCurrent } = storeToRefs(userStore);
   const { currentUser } = userStore;
   if (getCurrent == null) {
-    currentUser();
+    await currentUser();
   }
   return getCurrent;
 }
