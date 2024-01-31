@@ -84,7 +84,7 @@ export const useUserStore = defineStore("users", {
           user = await User.load(user.id);
         }
         this.current = user;
-        return Promise.resolve(current);
+        return Promise.resolve(user);
       }
       catch (error) {
         consoleError("UserStore.googleSignin", error);
@@ -99,7 +99,7 @@ export const useUserStore = defineStore("users", {
           await user.store();
         }
         this.current = user;
-        return Promise.resolve(current);
+        return Promise.resolve(user);
       }
       catch (error) {
         consoleError("UserStore.userLogin", error);
@@ -116,7 +116,7 @@ export const useUserStore = defineStore("users", {
           user = await user.store();
         }
         this.current = user;
-        return Promise.resolve(current);
+        return Promise.resolve(user);
       }
       catch (error) {
         consoleError("UserStore.userSignup", error);
