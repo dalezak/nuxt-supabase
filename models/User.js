@@ -54,9 +54,10 @@ export default class User extends SupaModel {
 
   static async current() {
     const supabaseUser = useSupabaseUser();
+    consoleLog("User.current supabase", supabaseUser);
     if (supabaseUser) {
       let user = await User.restore(supabaseUser.id) || await User.load(supabaseUser.id);
-      consoleLog("User.current", user);
+      consoleLog("User.current store", user);
       return user;
     }
     return null;
