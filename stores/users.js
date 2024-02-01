@@ -26,7 +26,8 @@ export const useUserStore = defineStore("users", {
     async currentUser() {
       try {
         if (this.current) {
-          return Promise.resolve(this.current);
+          return this.current;
+          // return Promise.resolve(this.current);
         }
         else {
           let user = await User.current();
@@ -34,11 +35,15 @@ export const useUserStore = defineStore("users", {
             await user.store();
           }
           this.current = user;
-          return Promise.resolve(user);
+          return this.current;
+          // return Promise.resolve(user);
         }
       }
       catch (error) {
-        return Promise.reject(error);
+        consoleError("UserStore.currentUser", error);
+        this.current = null;
+        return null;
+        // return Promise.reject(error);
       }
     },
     async loadUser({id}) {
