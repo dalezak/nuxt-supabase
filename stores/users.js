@@ -26,7 +26,6 @@ export const useUserStore = defineStore("users", {
     async currentUser() {
       try {
         if (this.current) {
-          consoleLog("UserStore.currentUser", "state", this.current);
           return Promise.resolve(this.current);
         }
         else {
@@ -35,12 +34,32 @@ export const useUserStore = defineStore("users", {
             await user.store();
           }
           this.current = user;
-          consoleLog("UserStore.currentUser", "load", this.current);
           return Promise.resolve(user);
         }
       }
       catch (error) {
         consoleError("UserStore.currentUser", error);
+        return Promise.reject(error);
+      }
+    },
+    async loadCurrent() {
+      try {
+        if (this.current) {
+          consoleLog("UserStore.loadCurrent", "state", this.current);
+          return Promise.resolve(this.current);
+        }
+        else {
+          let user = await User.current();
+          if (user) {
+            await user.store();
+          }
+          this.current = user;
+          consoleLog("UserStore.loadCurrent", "load", this.current);
+          return Promise.resolve(user);
+        }
+      }
+      catch (error) {
+        consoleError("UserStore.loadCurrent", error);
         return Promise.reject(error);
       }
     },
