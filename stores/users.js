@@ -150,9 +150,10 @@ export const useUserStore = defineStore("users", {
     async userLogout() {
       try {
         await User.logout();
-        this.user = null;
         this.current = null;
+        this.user = null;
         this.users = null;
+        consoleLog("UserStore.userLogout", "done");
         return Promise.resolve();
       }
       catch (error) {

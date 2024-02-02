@@ -112,9 +112,12 @@ export default class User extends SupaModel {
     try {
       const Storage = useStorage();
       await Storage.clear();
-      
+      consoleLog("User.logout", "store cleared");
+
       const Supabase = useSupabaseClient();
       await Supabase.auth.signOut();
+      consoleLog("User.logout", "session cleared");
+
       return true;
     }
     catch (error){
