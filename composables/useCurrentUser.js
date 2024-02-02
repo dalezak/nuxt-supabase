@@ -1,4 +1,4 @@
-export function useGetCurrent() {
+export function useCurrentUser() {
   const user = ref(null);
   const userStore = useUserStore();
   const { currentUser } = userStore;
