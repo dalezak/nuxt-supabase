@@ -6,60 +6,39 @@ import User from "../models/User";
 export const useUserStore = defineStore("users", {
   state: () => {
     return {
-      current: null,
+      profile: null,
       user: null,
       users: null
     }
   },
   getters: {
+    getProfile(state) {
+      return state.profile;
+    },
     getUser(state) {
       return state.user;
-    },
-    getCurrent(state) {
-      return state.current;
     },
     getUsers(state) {
       return state.users;
     }
   },
   actions: {
-    async currentUser() {
+    async loadProfile() {
       try {
-        if (this.current) {
-          return Promise.resolve(this.current);
+        if (this.profile) {
+          return Promise.resolve(this.profile);
         }
         else {
-          let user = await User.current();
-          if (user) {
-            await user.store();
+          let profile = await User.profile();
+          if (profile) {
+            await profile.store();
           }
-          this.current = user;
-          return Promise.resolve(user);
+          this.profile = profile;
+          return Promise.resolve(profile);
         }
       }
       catch (error) {
-        consoleError("UserStore.currentUser", error);
-        return Promise.reject(error);
-      }
-    },
-    async loadCurrent() {
-      try {
-        if (this.current) {
-          consoleLog("UserStore.loadCurrent", "state", this.current);
-          return Promise.resolve(this.current);
-        }
-        else {
-          let user = await User.current();
-          if (user) {
-            await user.store();
-          }
-          this.current = user;
-          consoleLog("UserStore.loadCurrent", "load", this.current);
-          return Promise.resolve(user);
-        }
-      }
-      catch (error) {
-        consoleError("UserStore.loadCurrent", error);
+        consoleError("UserStore.loadProfile", error);
         return Promise.reject(error);
       }
     },
@@ -107,7 +86,7 @@ export const useUserStore = defineStore("users", {
           user = await user.store();
           user = await User.load(user.id);
         }
-        this.current = user;
+        this.profile = user;
         return Promise.resolve(user);
       }
       catch (error) {
@@ -122,7 +101,7 @@ export const useUserStore = defineStore("users", {
         if (user) {
           await user.store();
         }
-        this.current = user;
+        this.profile = user;
         return Promise.resolve(user);
       }
       catch (error) {
@@ -139,7 +118,7 @@ export const useUserStore = defineStore("users", {
           user = await user.save();
           user = await user.store();
         }
-        this.current = user;
+        this.profile = user;
         return Promise.resolve(user);
       }
       catch (error) {
@@ -150,7 +129,7 @@ export const useUserStore = defineStore("users", {
     async userLogout() {
       try {
         await User.logout();
-        this.current = null;
+        this.profile = null;
         this.user = null;
         this.users = null;
         consoleLog("UserStore.userLogout", "done");

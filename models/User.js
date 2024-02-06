@@ -52,12 +52,12 @@ export default class User extends SupaModel {
     return null;
   }
 
-  static async current() {
+  static async profile() {
     const supabaseUser = useSupabaseUser();
     if (supabaseUser && supabaseUser.value) {
       let user_id = supabaseUser.value.id;
       let user = await User.restore(user_id) || await User.load(user_id);
-      consoleLog("User.current", user);
+      consoleLog("User.profile", user);
       return user;
     }
     return null;
