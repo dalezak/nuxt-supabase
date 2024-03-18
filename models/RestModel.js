@@ -26,11 +26,11 @@ export default class RestModel extends Model {
       initialCache: false
     });
     if (error.value) {
-      consoleError("RestModel.loadModel", error.value);
+      consoleError("RestModel.loadModel", modelClass.name, error.value);
       return null;
     }
     else if (response.value) {
-      consoleLog("RestModel.loadModel", response.value);
+      consoleLog("RestModel.loadModel", modelClass.name, response.value);
       let model = new modelClass(response.value);
       return model;
     }
@@ -44,11 +44,11 @@ export default class RestModel extends Model {
       body: values
     });
     if (error.value) {
-      consoleError("RestModel.saveModel", error.value);
+      consoleError("RestModel.saveModel", modelClass.name, error.value);
       return null;
     }
     else if (response.value) {
-      consoleLog("RestModel.saveModel", response.value);
+      consoleLog("RestModel.saveModel", modelClass.name, response.value);
       let model = new modelClass(response.value);
       return model;
     }
@@ -60,11 +60,11 @@ export default class RestModel extends Model {
       method: 'delete'
     });
     if (error.value) {
-      consoleError("RestModel.deleteModel", error.value);
+      consoleError("RestModel.deleteModel", modelClass.name, error.value);
       return false;
     }
     else if (response.value) {
-      consoleLog("RestModel.deleteModel", response.value);
+      consoleLog("RestModel.deleteModel", modelClass.name, response.value);
       return true;
     }
     return false;

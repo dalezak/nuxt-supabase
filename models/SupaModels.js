@@ -59,10 +59,10 @@ export default class SupaModels extends Models {
     }
     const { data: rows, error } = await query;
     if (error) {
-      consoleError("SupaModels.loadModels", error);
+      consoleError("SupaModels.loadModels", collectionClass.name, modelClass.name, tableName, error);
     }
     else if (rows && rows.length > 0) {
-      consoleLog(`SupaModels.loadModels ${tableName}`, rows);
+      consoleLog("SupaModels.loadModels", collectionClass.name, modelClass.name, tableName, rows);
       for (let row of rows) {
         let model = new modelClass(row);
         collection.push(model);

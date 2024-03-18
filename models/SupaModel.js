@@ -28,12 +28,12 @@ export default class SupaModel extends Model {
     let { data: row, error } = await query.single();
     if (error) {
       if (error.code != "PGRST116") {
-        consoleError("SupaModel.loadModel", error);
+        consoleError("SupaModel.loadModel", modelClass.name, error);
       }
       return null;
     }    
     else if (row) {
-      console.info("SupaModel.loadModel", row);
+      console.info("SupaModel.loadModel", modelClass.name, row);
       let model = new modelClass(row);
       return model;
     }
@@ -50,10 +50,10 @@ export default class SupaModel extends Model {
       }
       const { data, error } = await query.select()
       if (error) {
-        consoleError("SupaModel.saveModel", error);
+        consoleError("SupaModel.saveModel", modelClass.name, error);
       }    
       else if (data) {
-        console.info("SupaModel.saveModel", data.at(0));
+        console.info("SupaModel.saveModel", modelClass.name, data.at(0));
         let model = new modelClass(data.at(0));
         return model;
       }
@@ -62,10 +62,10 @@ export default class SupaModel extends Model {
     else {
       const { data: row, error } = await Supabase.from(table).insert(values).select()
       if (error) {
-        consoleError("SupaModel.saveModel", error);
+        consoleError("SupaModel.saveModel", modelClass.name, error);
       }    
       else if (row) {
-        console.info("SupaModel.saveModel", row.at(0));
+        console.info("SupaModel.saveModel", modelClass.name, row.at(0));
         let model = new modelClass(row.at(0));
         return model;
       }
@@ -83,7 +83,7 @@ export default class SupaModel extends Model {
       }
       const { error } = await query.delete();
       if (error) {
-        consoleLog("SupaModel.deleteModel", error);
+        consoleLog("SupaModel.deleteModel", modelClass.name, error);
         return false;
       }
       return true;
