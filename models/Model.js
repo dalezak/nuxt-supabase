@@ -43,7 +43,7 @@ export default class Model {
     let data = await Storage.get(key);
     if (data) {
       let model = new modelClass(data);
-      consoleLog("Model.restoreModel", modelClass.name, model, key, data);
+      consoleLog("Model.restoreModel", modelClass.name, key, data);
       return model;
     }
     consoleLog("Model.restoreModel", modelClass.name, key, "not found");

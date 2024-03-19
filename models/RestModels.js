@@ -14,11 +14,11 @@ export default class RestModels extends Models {
       initialCache: false
     });
     if (error.value) {
-      consoleError("RestModels.loadModels", collectionClass.name, modelClass.name, error.value);
+      consoleError("RestModels.loadModels", collectionClass.name, error.value);
       return null;
     }
     else if (results && results.value) {
-      consoleLog("RestModels.loadModels", collectionClass.name, modelClass.name, results.value);
+      consoleLog("RestModels.loadModels", collectionClass.name, results.value);
       for (let result of results.value) {
         let model = new modelClass(result);
         collection.push(model);
