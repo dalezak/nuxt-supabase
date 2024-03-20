@@ -6,7 +6,7 @@ export default class SupaModels extends Models {
     super(models);
   }
 
-  static async loadModels(collectionClass, modelClass, tableName, { limit = 10, offset = 0, order = null, where = [], select = '*' } = {}) {
+  static async loadModels(collectionClass, modelClass, tableName, { select = '*', limit = 10, offset = 0, where = [], order = null } = {}) {
     const Supabase = useSupabaseClient();
     let collection = new collectionClass();
     let query = Supabase.from(tableName).select(select);

@@ -28,12 +28,12 @@ export default class SupaModel extends Model {
     let { data: row, error } = await query.single();
     if (error) {
       if (error.code != "PGRST116") {
-        consoleError("SupaModel.loadModel", modelClass.name, error);
+        consoleWarn("SupaModel.loadModel", modelClass.name, error);
       }
       return null;
     }    
     else if (row) {
-      console.info("SupaModel.loadModel", modelClass.name, row);
+      consoleLog("SupaModel.loadModel", modelClass.name, row);
       let model = new modelClass(row);
       return model;
     }
@@ -53,7 +53,7 @@ export default class SupaModel extends Model {
         consoleError("SupaModel.saveModel", modelClass.name, error);
       }    
       else if (data) {
-        console.info("SupaModel.saveModel", modelClass.name, data.at(0));
+        consoleLog("SupaModel.saveModel", modelClass.name, data.at(0));
         let model = new modelClass(data.at(0));
         return model;
       }
@@ -65,7 +65,7 @@ export default class SupaModel extends Model {
         consoleError("SupaModel.saveModel", modelClass.name, error);
       }    
       else if (row) {
-        console.info("SupaModel.saveModel", modelClass.name, row.at(0));
+        consoleLog("SupaModel.saveModel", modelClass.name, row.at(0));
         let model = new modelClass(row.at(0));
         return model;
       }

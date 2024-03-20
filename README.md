@@ -16,7 +16,7 @@ npm run reinstall
 
 Update packages
 ```bash
-npm update
+npm run update
 ```
 
 ## Development

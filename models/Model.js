@@ -22,7 +22,7 @@ export default class Model {
     const Storage = useStorage();
     if (this.deleted_at && this.deleted_at.length > 0) {
       await Storage.remove(key);
-      consoleLog("Model.storeModel", this.constructor.name, key, "deleted");
+      consoleLog("Model.storeModel", this.constructor.name, key, "Deleted");
       return null;
     }
     else {
@@ -46,7 +46,7 @@ export default class Model {
       consoleLog("Model.restoreModel", modelClass.name, key, data);
       return model;
     }
-    consoleLog("Model.restoreModel", modelClass.name, key, "not found");
+    consoleLog("Model.restoreModel", modelClass.name, key, "Not Found");
     return null;
   }
 

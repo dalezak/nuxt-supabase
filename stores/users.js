@@ -38,7 +38,7 @@ export const useUsersStore = defineStore("users", {
         }
       }
       catch (error) {
-        consoleError("UserStore.loadProfile", error);
+        consoleError("UsersStore.loadProfile", error);
         return Promise.reject(error);
       }
     },
@@ -52,7 +52,7 @@ export const useUsersStore = defineStore("users", {
         return Promise.resolve(user);
       }
       catch (error) {
-        consoleError("UserStore.loadUser", error);
+        consoleError("UsersStore.loadUser", error);
         return Promise.reject(error);
       }
     },
@@ -74,7 +74,7 @@ export const useUsersStore = defineStore("users", {
         return Promise.resolve(users);
       }
       catch (error) {
-        consoleError("UserStore.loadUsers", error);
+        consoleError("UsersStore.loadUsers", error);
         return Promise.reject(error);
       }
     },
@@ -90,13 +90,13 @@ export const useUsersStore = defineStore("users", {
         return Promise.resolve(user);
       }
       catch (error) {
-        consoleError("UserStore.googleSignin", error);
+        consoleError("UsersStore.googleSignin", error);
         return Promise.reject(error);
       }
     },
     async userLogin({email, password}) {
       try {
-        consoleLog("UserStore.userLogin", email, password);
+        consoleLog("UsersStore.userLogin", email, password);
         let user = await User.login(email, password);
         if (user) {
           await user.store();
@@ -105,13 +105,13 @@ export const useUsersStore = defineStore("users", {
         return Promise.resolve(user);
       }
       catch (error) {
-        consoleError("UserStore.userLogin", error);
+        consoleError("UsersStore.userLogin", error);
         return Promise.reject(error);
       }
     },
     async userSignup({name, email, password}) {
       try {
-        consoleLog("UserStore.userSignup", name, email, password);
+        consoleLog("UsersStore.userSignup", name, email, password);
         let user = await User.signup(email, password, name);
         if (user) {
           user.name = name;
@@ -122,7 +122,7 @@ export const useUsersStore = defineStore("users", {
         return Promise.resolve(user);
       }
       catch (error) {
-        consoleError("UserStore.userSignup", error);
+        consoleError("UsersStore.userSignup", error);
         return Promise.reject(error);
       }
     },
@@ -132,11 +132,11 @@ export const useUsersStore = defineStore("users", {
         this.profile = null;
         this.user = null;
         this.users = null;
-        consoleLog("UserStore.userLogout", "done");
+        consoleLog("UsersStore.userLogout", "done");
         return Promise.resolve();
       }
       catch (error) {
-        consoleError("UserStore.userLogout", error);
+        consoleError("UsersStore.userLogout", error);
         return Promise.reject(error);
       }
     },
@@ -146,7 +146,7 @@ export const useUsersStore = defineStore("users", {
         return Promise.resolve();
       }
       catch (error) {
-        consoleError("UserStore.resetPassword", error);
+        consoleError("UsersStore.resetPassword", error);
         return Promise.reject(error);
       }
     },
@@ -156,7 +156,7 @@ export const useUsersStore = defineStore("users", {
         return Promise.resolve();
       }
       catch (error) {
-        consoleError("UserStore.updatePassword", error);
+        consoleError("UsersStore.updatePassword", error);
         return Promise.reject(error);
       }
     }
