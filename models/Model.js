@@ -22,14 +22,14 @@ export default class Model {
     const Storage = useStorage();
     if (this.deleted_at && this.deleted_at.length > 0) {
       await Storage.remove(key);
-      consoleLog("Model.storeModel", this.constructor.name, key, "Deleted");
+      // consoleLog("Model.storeModel", this.constructor.name, key, "Deleted");
       return null;
     }
     else {
       const json = JSON.stringify(this);
       const data = JSON.parse(json);
       await Storage.set(key, data);
-      consoleLog("Model.storeModel", this.constructor.name, key, data);
+      // consoleLog("Model.storeModel", this.constructor.name, key, data);
       return this;
     }
   }
@@ -43,10 +43,10 @@ export default class Model {
     let data = await Storage.get(key);
     if (data) {
       let model = new modelClass(data);
-      consoleLog("Model.restoreModel", modelClass.name, key, data);
+      // consoleLog("Model.restoreModel", modelClass.name, key, data);
       return model;
     }
-    consoleLog("Model.restoreModel", modelClass.name, key, "Not Found");
+    // consoleLog("Model.restoreModel", modelClass.name, key, "Not Found");
     return null;
   }
 

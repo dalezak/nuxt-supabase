@@ -60,7 +60,7 @@ export default class SupaModel extends Model {
       return null;
     }
     else {
-      const { data: row, error } = await Supabase.from(table).insert(values).select()
+      const { data: row, error } = await Supabase.from(table).insert(values).select();
       if (error) {
         consoleError("SupaModel.saveModel", modelClass.name, error);
       }    
