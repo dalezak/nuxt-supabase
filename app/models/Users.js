@@ -8,7 +8,7 @@ export default class Users extends SupaModels {
   }
 
   static async clear() {
-    return SupaModels.clearModel("users");
+    return SupaModels.clearModels("users");
   }
 
   static async load(limit = 10, offset = 0, search = "") {

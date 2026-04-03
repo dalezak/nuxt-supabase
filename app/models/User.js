@@ -33,8 +33,8 @@ export default class User extends SupaModel {
 
   static async google() {
     const Supabase = useSupabaseClient();
-    const { data: auth, error } = await Supabase.auth.signIn({ 
-      provider: 'google' 
+    const { data: auth, error } = await Supabase.auth.signInWithOAuth({
+      provider: 'google'
     });
     if (error) {
       consoleError("User.google", error);
@@ -129,7 +129,7 @@ export default class User extends SupaModel {
   static async resetPassword(email) {
     const Supabase = useSupabaseClient();
     const { data, error } = await Supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.APP_URL}/reset?email=${email}`,
+      redirectTo: `${useRuntimeConfig().public.url}/reset?email=${email}`,
     });
     if (error) {
       consoleError("User.resetPassword", error);

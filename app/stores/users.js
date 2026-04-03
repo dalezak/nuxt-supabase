@@ -83,7 +83,7 @@ export const useUsersStore = defineStore("users", {
         let user = await User.google();
         if (user) {
           user = await user.save();
-          user = await user.store();
+          await user.store();
           user = await User.load(user.id);
         }
         this.profile = user;
@@ -96,7 +96,7 @@ export const useUsersStore = defineStore("users", {
     },
     async userLogin({email, password}) {
       try {
-        consoleLog("UsersStore.userLogin", email, password);
+        consoleLog("UsersStore.userLogin", email);
         let user = await User.login(email, password);
         if (user) {
           await user.store();
@@ -111,7 +111,7 @@ export const useUsersStore = defineStore("users", {
     },
     async userSignup({name, email, password}) {
       try {
-        consoleLog("UsersStore.userSignup", name, email, password);
+        consoleLog("UsersStore.userSignup", name, email);
         let user = await User.signup(email, password, name);
         if (user) {
           user.name = name;

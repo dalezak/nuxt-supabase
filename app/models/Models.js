@@ -19,7 +19,7 @@ export default class Models extends Array {
     // consoleLog("Models.save", this.constructor.name, this.length);
     for (let item of this) {
       if (typeof item.save === 'function') {
-        item.save();
+        await item.save();
       }
     }
   }
@@ -28,7 +28,7 @@ export default class Models extends Array {
     // consoleLog("Models.save", this.constructor.name, this.length);
     for (let item of this) {
       if (typeof item.store === 'function') {
-        item.store();
+        await item.store();
       }
     }
   }

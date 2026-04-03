@@ -22,8 +22,7 @@ export default class RestModel extends Model {
   static async loadModel(modelClass, url, params = {}) {
     const { error, data: response } = await useFetch(url, {
       key: RestModel.urlQuery(url, params),
-      params: params,
-      initialCache: false
+      params: params
     });
     if (error.value) {
       consoleError("RestModel.loadModel", modelClass.name, error.value);

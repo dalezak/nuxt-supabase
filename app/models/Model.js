@@ -50,18 +50,29 @@ export default class Model {
     return null;
   }
 
-  getAttributes() {
-    return Object.keys(this).filter(key => key != "id" && key.endsWith("_count") == false && key.endsWith("_at") == false);
+  get excludedAttributes() {
+    return ["id"];
   }
 
-  getValues(attributes=[]) {
+  get excludedSuffixes() {
+    return ["_count", "_at"];
+  }
+
+  getAttributes() {
+    return Object.keys(this).filter(key =>
+      !this.excludedAttributes.includes(key) &&
+      !this.excludedSuffixes.some(suffix => key.endsWith(suffix))
+    );
+  }
+
+  getValues(attributes=[], includeNulls = false) {
     let values = {}
     if (attributes == null || attributes.length == 0) {
       attributes = this.getAttributes();
     }
     let keys = Object.keys(this).filter(key => attributes.includes(key));
     for (let key of keys) {
-      if (this[key] != null) {
+      if (includeNulls || this[key] != null) {
         values[key] = this[key];
       }
     }

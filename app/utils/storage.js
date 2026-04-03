@@ -17,7 +17,7 @@ export class Storage {
 
   constructor(name=null) {
     consoleLog("utils/storage")
-    if (process.client) {
+    if (import.meta.client) {
       try {
         this.unstorage = createStorage({
           driver: indexedDbDriver({
@@ -35,21 +35,21 @@ export class Storage {
   }
 
   async keys(prefix = null) {
-    if (process.client) {
+    if (import.meta.client) {
       return await this.unstorage.getKeys(prefix);
     }
     return [];
   }
 
   async get(key) {
-    if (process.client) {
+    if (import.meta.client) {
       return await this.unstorage.getItem(key);
     }
     return null;
   }
 
   async set(key, value) {
-    if (process.client) {
+    if (import.meta.client) {
       if (value) {
         return await this.unstorage.setItem(key, value);
       }
@@ -58,8 +58,10 @@ export class Storage {
     return null;
   }
 
+  // Note: loads all keys and items for the given prefix into memory before filtering.
+  // Fine for small datasets; avoid for large collections.
   async count(prefix, needle = "", haystack = null) {
-    if (process.client) {
+    if (import.meta.client) {
       let counts = 0;
       let keys = await this.unstorage.getKeys(prefix);
       let search = needle && needle.length > 0 ? needle.toLowerCase() : "";
@@ -99,8 +101,10 @@ export class Storage {
     return 0;
   }
 
+  // Note: loads all keys and items for the given prefix into memory before filtering.
+  // Fine for small datasets; avoid for large collections.
   async search(prefix, needle = "", haystack = null, offset = 0, limit = 100, sort = null) {
-    if (process.client) {
+    if (import.meta.client) {
       let results = [];
       let keys = await this.unstorage.getKeys(prefix);
       let search = needle && needle.length > 0 ? needle.toLowerCase() : "";
@@ -144,14 +148,14 @@ export class Storage {
   }
 
   async remove(key) {
-    if (process.client) {
+    if (import.meta.client) {
       return await this.unstorage.removeItem(key);
     }
     return null;
   }
 
   async clear(prefix = null) {
-    if (process.client) {
+    if (import.meta.client) {
       if (prefix && prefix.length > 0) {
         let keys = await this.unstorage.getKeys(prefix);
         for (let key of keys) {
@@ -165,7 +169,7 @@ export class Storage {
   }
 
   sortByProperties(properties) {
-    if (process.client) {
+    if (import.meta.client) {
       return (a, b) => {
         let i = 0;
         let result = 0;
@@ -181,11 +185,11 @@ export class Storage {
   }
 
   sortByProperty(property) {
-    if (process.client) {
+    if (import.meta.client) {
       let sortOrder = 1;
       if (property[0] === "-") {
         sortOrder = -1;
-        property = property.substr(1, property.length - 1);
+        property = property.slice(1);
       }
       return (a, b) => {
         if (typeof a[property] == "boolean") {

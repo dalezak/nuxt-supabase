@@ -13,15 +13,17 @@
     "prod": "nuxt dev --dotenv .env.prod",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@nuxt/devtools": "latest",
     "@nuxtjs/supabase": "^2.0.4",
     "@snaplet/copycat": "^6.0.0",
-    "eslint": "^9.0.0",
+    "eslint": "^10.1.0",
     "eslint-plugin-vue": "^10.8.0",
     "nuxt": "^4.4.2",
+    "vitest": "^3.2.4",
     "vue": "^3.5.31",
     "vue-router": "^5.0.4"
   },

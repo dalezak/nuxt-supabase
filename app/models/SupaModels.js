@@ -2,8 +2,8 @@ import Models from './Models';
 
 export default class SupaModels extends Models {
 
-  constructor(models = []) {
-    super(models);
+  constructor(modelClass, models = []) {
+    super(modelClass, models);
   }
 
   static async loadModels(collectionClass, modelClass, tableName, { select = '*', limit = 10, offset = 0, where = [], order = null } = {}) {
@@ -48,6 +48,9 @@ export default class SupaModels extends Models {
         }
         else if (operator == "cd") {
           query = query.cd(column, value);
+        }
+        else if (operator == "neq") {
+          query = query.neq(column, value);
         }
       }
     }

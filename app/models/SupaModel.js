@@ -43,9 +43,9 @@ export default class SupaModel extends Model {
   async saveModel(modelClass, table, attributes = [], keys = ['id']) {
     const Supabase = useSupabaseClient();
     let values = this.getValues(attributes);
-    if (this.id && this.id.length > 0) {
+    if (!!this.id) {
       let query = Supabase.from(table).upsert(values);
-      for (let key in keys) {
+      for (let key of keys) {
         query = query.eq(key, this[key]);
       }
       const { data, error } = await query.select()
@@ -78,7 +78,7 @@ export default class SupaModel extends Model {
     if (keys && keys.length > 0) {
       const Supabase = useSupabaseClient();
       let query = Supabase.from(table);
-      for (let key in keys) {
+      for (let key of keys) {
         query = query.eq(key, where[key]);
       }
       const { error } = await query.delete();
