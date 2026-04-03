@@ -11,7 +11,7 @@ class TestModel extends RestModel {
 
 class TestCollection extends RestModels {
   constructor(models = []) {
-    super(models)
+    super(TestModel, models)
   }
 }
 

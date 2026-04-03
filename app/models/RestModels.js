@@ -2,8 +2,8 @@ import Models from './Models';
 
 export default class RestModels extends Models {
 
-  constructor(models = []) {
-    super(models);
+  constructor(modelClass, models = []) {
+    super(modelClass, models);
   }
 
   static async loadModels(collectionClass, modelClass, url, params = {}) {

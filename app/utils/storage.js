@@ -209,7 +209,7 @@ export class Storage {
     if (config && config.public && config.public.app && config.public.app.name) {
       return config.public.app.name;
     }
-    return process.env.APP_NAME;
+    return null;
   }
 
 }
