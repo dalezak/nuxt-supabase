@@ -9,6 +9,7 @@ npm install
 ```
 
 Update packages
+
 ```bash
 npm run update
 ```
