@@ -28,16 +28,18 @@ export const useUsersStore = defineStore("users", {
         if (this.profile) {
           return Promise.resolve(this.profile);
         }
-        else {
-          let profile = await User.profile();
-          if (profile?.id) {
-            await profile.store();
-          } else {
-            profile = null;
-          }
-          this.profile = profile;
-          return Promise.resolve(profile);
+        const client = useSupabaseClient();
+        const { data: { user: authUser } } = await client.auth.getUser();
+        const user_id = authUser?.id;
+        if (!user_id) return Promise.resolve(null);
+        let profile = await User.profile(user_id);
+        if (profile?.id) {
+          await profile.store();
+        } else {
+          profile = null;
         }
+        this.profile = profile;
+        return Promise.resolve(profile);
       }
       catch (error) {
         consoleError("UsersStore.loadProfile", error);
