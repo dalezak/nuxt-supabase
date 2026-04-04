@@ -120,7 +120,7 @@ describe('Model', () => {
     })
 
     it('returns a model instance when data is found in storage', async () => {
-      mockStorage.get.mockResolvedValue({ name: 'Alice' })
+      mockStorage.get.mockResolvedValue({ id: '1', name: 'Alice' })
       const result = await Model.restoreModel(Model, 'test/1')
       expect(mockStorage.get).toHaveBeenCalledWith('test/1')
       expect(result).toBeInstanceOf(Model)

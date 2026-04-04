@@ -2,10 +2,27 @@ import Models from './Models';
 
 export default class SupaModels extends Models {
 
+  // modelClass — class to instantiate for each item (e.g. User).
+  // models — optional array of plain data to hydrate on construction.
+  // Subclasses must pass both args through: super(modelClass, models).
   constructor(modelClass, models = []) {
     super(modelClass, models);
   }
 
+  // Queries tableName and returns a collectionClass instance populated with
+  // modelClass instances.
+  //
+  // Options:
+  //   select  — Supabase select string, default '*'
+  //   limit   — max rows to return, default 10
+  //   offset  — row offset for pagination, default 0
+  //   order   — 'column:asc' or 'column:desc', e.g. 'created_at:desc'
+  //   where   — array of [column, operator, value] triples, e.g.:
+  //               [['name', 'eq', 'Alice'], ['age', 'gte', 18]]
+  //             Supported operators: eq, neq, gt, lt, gte, lte, ilike,
+  //             like, is, in, cs, cd. ilike/like auto-wrap value in %.
+  //
+  // Returns an empty collection on error (never null).
   static async loadModels(collectionClass, modelClass, tableName, { select = '*', limit = 10, offset = 0, where = [], order = null } = {}) {
     const Supabase = useSupabaseClient();
     let collection = new collectionClass();

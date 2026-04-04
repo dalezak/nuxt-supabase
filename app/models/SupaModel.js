@@ -5,19 +5,29 @@ export default class SupaModel extends Model {
   constructor(data = {}) {
     super(data);
   }
-  
+
+  // Override in subclasses to load a single record from Supabase by id.
+  // Typically delegates to loadModel(). Returns null by default.
   static async load(id) {
     return null;
   }
 
+  // Override in subclasses to upsert/insert to Supabase.
+  // Typically delegates to saveModel(). Returns null by default.
   async save() {
     return null;
   }
 
+  // Override in subclasses to delete from Supabase.
+  // Typically delegates to deleteModel(). Returns false by default.
   async delete() {
     return false;
   }
 
+  // Fetches a single row from table matching all where conditions (AND).
+  // where is a plain object: { id: '123', email: 'alice@example.com' }.
+  // Returns a hydrated modelClass instance, or null if not found or on error.
+  // PGRST116 (no rows) is silently ignored; all other errors are logged.
   static async loadModel(modelClass, table, where = {}) {
     const Supabase = useSupabaseClient();
     let query = Supabase.from(table).select("*");
@@ -31,7 +41,7 @@ export default class SupaModel extends Model {
         consoleWarn("SupaModel.loadModel", modelClass.name, error);
       }
       return null;
-    }    
+    }
     else if (row) {
       consoleLog("SupaModel.loadModel", modelClass.name, row);
       let model = new modelClass(row);
@@ -40,6 +50,13 @@ export default class SupaModel extends Model {
     return null;
   }
 
+  // Inserts or upserts a row in table.
+  // attributes — field names to include (passed to getValues()).
+  // keys — fields used in the .eq() filter for upsert (default ['id']).
+  // If this.id is set: upserts using keys as the conflict target.
+  // If this.id is null/undefined: inserts a new row.
+  // Returns a freshly hydrated modelClass instance from the DB response,
+  // or null on error.
   async saveModel(modelClass, table, attributes = [], keys = ['id']) {
     const Supabase = useSupabaseClient();
     let values = this.getValues(attributes);
@@ -51,7 +68,7 @@ export default class SupaModel extends Model {
       const { data, error } = await query.select()
       if (error) {
         consoleError("SupaModel.saveModel", modelClass.name, error);
-      }    
+      }
       else if (data) {
         consoleLog("SupaModel.saveModel", modelClass.name, data.at(0));
         let model = new modelClass(data.at(0));
@@ -63,7 +80,7 @@ export default class SupaModel extends Model {
       const { data: row, error } = await Supabase.from(table).insert(values).select();
       if (error) {
         consoleError("SupaModel.saveModel", modelClass.name, error);
-      }    
+      }
       else if (row) {
         consoleLog("SupaModel.saveModel", modelClass.name, row.at(0));
         let model = new modelClass(row.at(0));
@@ -73,6 +90,9 @@ export default class SupaModel extends Model {
     }
   }
 
+  // Deletes rows from table matching all where conditions (AND).
+  // where is a plain object: { id: '123' }.
+  // Returns true on success, false if where is empty or on error.
   async deleteModel(modelClass, table, where = {}) {
     const keys = where ? Object.keys(where) : [];
     if (keys && keys.length > 0) {

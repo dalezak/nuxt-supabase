@@ -138,23 +138,7 @@ describe('RestModel.deleteModel()', () => {
   })
 })
 
-describe('RestModels.urlQuery()', () => {
-  it('returns the URL unchanged when params is empty', () => {
-    const result = RestModels.urlQuery('https://api.example.com/items')
-    expect(result).toBe('https://api.example.com/items')
-  })
-
-  it('appends params as query string', () => {
-    const result = RestModels.urlQuery('https://api.example.com/items', { limit: '10' })
-    const url = new URL(result)
-    expect(url.searchParams.get('limit')).toBe('10')
-  })
-
-  it('handles null params gracefully', () => {
-    const result = RestModels.urlQuery('https://api.example.com/items', null)
-    expect(result).toBe('https://api.example.com/items')
-  })
-})
+// RestModels delegates urlQuery to RestModel — tested via RestModel.urlQuery() above.
 
 describe('RestModels.loadModels()', () => {
   it('returns a populated collection on success', async () => {

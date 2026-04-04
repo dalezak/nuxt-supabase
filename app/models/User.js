@@ -9,28 +9,39 @@ export default class User extends SupaModel {
 
   created_at = null;
   updated_at = null;
-  
+
   constructor(data = {}) {
     super(data);
     Object.assign(this, data);
   }
 
+  // Persists this user to local storage under 'users/{id}'.
   async store() {
     return await this.storeModel(`users/${this.id}`);
   }
 
+  // Reads a user from local storage by id (cache lookup).
+  // Returns null on cache miss — call load() as fallback.
   static async restore(id) {
     return await SupaModel.restoreModel(User, `users/${id}`);
   }
 
+  // Loads a user from Supabase by id.
+  // Try restore() first to avoid the DB round-trip.
   static async load(id) {
     return await SupaModel.loadModel(User, "users", { id: id });
   }
 
+  // Upserts this user to Supabase (id, name, email).
+  // Returns a fresh User from the DB response, or null on error.
   async save() {
     return this.saveModel(User, "users", ["id", "name", "email"]);
   }
 
+  // Initiates Google OAuth sign-in (redirect flow).
+  // On success returns a User populated from the OAuth response.
+  // Note: auth.user may not be present immediately in the redirect flow —
+  // call profile() after the OAuth callback instead.
   static async google() {
     const Supabase = useSupabaseClient();
     const { data: auth, error } = await Supabase.auth.signInWithOAuth({
@@ -52,6 +63,8 @@ export default class User extends SupaModel {
     return null;
   }
 
+  // Loads the current user by user_id: checks local storage first (restore),
+  // falls back to Supabase (load). Returns null if user_id is falsy.
   static async profile(user_id) {
     if (!user_id) return null;
     let user = await User.restore(user_id) || await User.load(user_id);
@@ -59,11 +72,13 @@ export default class User extends SupaModel {
     return user;
   }
 
+  // Signs in with email + password via Supabase.
+  // Returns a User on success, null on error or if no user is returned.
   static async login(email, password) {
     const Supabase = useSupabaseClient();
-    const { data: auth, error } = await Supabase.auth.signInWithPassword({ 
-      email: email, 
-      password: password 
+    const { data: auth, error } = await Supabase.auth.signInWithPassword({
+      email: email,
+      password: password
     });
     if (error) {
       consoleError("User.login", error);
@@ -81,11 +96,15 @@ export default class User extends SupaModel {
     return null;
   }
 
+  // Creates a new Supabase auth account with email + password.
+  // name is stored on the returned User but not saved to DB here —
+  // call user.save() after signup to persist the profile row.
+  // Returns a User on success, null on error.
   static async signup(email, password, name) {
     const Supabase = useSupabaseClient();
-    const { data: auth, error } = await Supabase.auth.signUp({ 
-      email: email, 
-      password: password 
+    const { data: auth, error } = await Supabase.auth.signUp({
+      email: email,
+      password: password
     });
     if (error) {
       consoleError("User.signup", error);
@@ -104,6 +123,8 @@ export default class User extends SupaModel {
     return null;
   }
 
+  // Clears all local storage then signs out of Supabase.
+  // Returns true on success, false if any step throws.
   static async logout() {
     try {
       const Storage = useStorage();
@@ -122,6 +143,9 @@ export default class User extends SupaModel {
     }
   }
 
+  // Sends a password reset email to the user.
+  // Redirect URL is built from runtimeConfig.public.url — ensure APP_URL is set.
+  // Returns true on success, false on error.
   static async resetPassword(email) {
     const Supabase = useSupabaseClient();
     const { data, error } = await Supabase.auth.resetPasswordForEmail(email, {
@@ -138,6 +162,8 @@ export default class User extends SupaModel {
     return false;
   }
 
+  // Updates the password for the currently authenticated user.
+  // Returns true on success, false on error.
   static async updatePassword(password) {
     const Supabase = useSupabaseClient();
     const { data, error } = await Supabase.auth.updateUser({ password: password });
