@@ -17,8 +17,8 @@ app/                 Nuxt source directory (srcDir)
   models/            Base classes and Supabase-specific subclasses
     Model.js           Base class: getAttributes(), getValues(), storeModel/restoreModel
     Models.js          Base collection (extends Array): save(), store()
-    SupaModel.js       Supabase model: loadModel(), saveModel(), deleteModel()
-    SupaModels.js      Supabase collection: loadModels() with where/order/range
+    SupaModel.js       Supabase model: loadModel(), findModel(), saveModel(), deleteModel(), insertModel(), upsertModel()
+    SupaModels.js      Supabase collection: loadModels(), deleteModels(), countModels()
     RestModel.js       REST model: useFetch-based loadModel/saveModel/deleteModel
     RestModels.js      REST collection: useFetch-based loadModels()
     User.js            Auth + profile model (login, signup, google, resetPassword)
@@ -50,7 +50,18 @@ supabase/            Supabase migrations/config (root)
 
 - **Nuxt 4 globals**: Use `import.meta.client` / `import.meta.server` instead of the deprecated `process.client` / `process.server`. Use `import.meta.dev` / `import.meta.prod` instead of `process.env.NODE_ENV` checks.
 - **Auto-imports**: Nuxt auto-imports composables (`useStorage`, `useAppUser`, `useSupabaseClient`, `useSupabaseUser`, `useRuntimeConfig`) and utils (`consoleLog`, `consoleWarn`, `consoleError`). Do not import these manually in app code.
-- **Model pattern**: Subclass `SupaModel` / `SupaModels` for database-backed models. Override `save()`, `delete()`, `store()`, and `load()` to delegate to the protected `*Model()` helpers.
+- **Model pattern**: Subclass `SupaModel` / `SupaModels` for database-backed models. Override `save()`, `delete()`, `store()`, and `load()` to delegate to the helpers below.
+- **SupaModel helpers**:
+  - `loadModel(modelClass, table, where)` — fetches a single row via `.single()`; PGRST116 (no rows) is silently ignored
+  - `findModel(modelClass, table, where)` — like `loadModel` but uses `.maybeSingle()`; prefer this for optional lookups where zero rows is expected
+  - `saveModel(modelClass, table, attributes, keys)` — upserts when `this.id` is set, inserts otherwise; returns a fresh hydrated instance
+  - `deleteModel(modelClass, table, where)` — deletes rows matching all where conditions; returns true/false
+  - `insertModel(table, values)` — static, inserts without returning the row; throws on error
+  - `upsertModel(table, values, onConflict)` — static, upserts with explicit conflict columns e.g. `'user_id,question_id'`; throws on error
+- **SupaModels helpers**:
+  - `loadModels(collectionClass, modelClass, table, { select, limit, offset, where, order })` — paginated query; `where` is `[[column, operator, value], ...]`; supported operators: `eq neq gt lt gte lte ilike like is in cs cd`; `ilike`/`like` auto-wrap value in `%`
+  - `deleteModels(table, where)` — bulk delete matching where clauses; throws on error
+  - `countModels(table, where)` — returns exact row count matching where clauses; returns 0 on error
 - **Collection pattern**: Subclass `SupaModels` with `constructor(modelClass, models)` calling `super(modelClass, models)`. Pass both args through.
 - **Runtime config**: Use `useRuntimeConfig().public.url` for the app URL — not `process.env.APP_URL` (unreliable client-side).
 - **Local storage**: Use `useStorage()` (or `this.$storage`) — never access `localStorage`/`indexedDB` directly.
@@ -68,4 +79,4 @@ supabase/            Supabase migrations/config (root)
 
 - `nuxt.config.ts`: SSR enabled, Pinia + Supabase modules, `runtimeConfig.public.url` from `APP_URL`
 - Supabase redirect is disabled (`redirect: false`); login redirect is `/login`
-- Environment variables: `APP_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`
+- Environment variables: `APP_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SECRET_KEY`
