@@ -24,6 +24,52 @@ export default class SupaModel extends Model {
     return false;
   }
 
+  // Like loadModel but uses maybeSingle() — returns null when no row matches
+  // without treating zero rows as an error. Use for optional lookups (e.g. find
+  // user by email) where the record may legitimately not exist.
+  static async findModel(modelClass, table, where = {}) {
+    const Supabase = useSupabaseClient();
+    let query = Supabase.from(table).select("*");
+    for (let key of Object.keys(where)) {
+      if (where[key] == null) return null;
+      query = query.eq(key, where[key]);
+    }
+    let { data: row, error } = await query.maybeSingle();
+    if (error) {
+      consoleWarn("SupaModel.findModel", modelClass.name, error);
+      return null;
+    }
+    if (row) {
+      consoleLog("SupaModel.findModel", modelClass.name, row);
+      return new modelClass(row);
+    }
+    return null;
+  }
+
+  // Inserts a new row into table with the given values.
+  // Does not return the inserted row (avoids triggering a separate RLS select).
+  // Throws on error.
+  static async insertModel(table, values) {
+    const Supabase = useSupabaseClient();
+    const { error } = await Supabase.from(table).insert(values);
+    if (error) {
+      consoleError("SupaModel.insertModel", table, error);
+      throw error;
+    }
+  }
+
+  // Upserts a row into table. onConflict is a comma-separated string of
+  // conflict columns, e.g. 'user_id,question_id'.
+  // Does not return the upserted row. Throws on error.
+  static async upsertModel(table, values, onConflict) {
+    const Supabase = useSupabaseClient();
+    const { error } = await Supabase.from(table).upsert(values, { onConflict });
+    if (error) {
+      consoleError("SupaModel.upsertModel", table, error);
+      throw error;
+    }
+  }
+
   // Fetches a single row from table matching all where conditions (AND).
   // where is a plain object: { id: '123', email: 'alice@example.com' }.
   // Returns a hydrated modelClass instance, or null if not found or on error.

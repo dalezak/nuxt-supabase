@@ -9,6 +9,28 @@ export default class SupaModels extends Models {
     super(modelClass, models);
   }
 
+  // Deletes rows from tableName matching the given where clauses.
+  // where — array of [column, operator, value] triples (same format as loadModels).
+  // Supports any Supabase filter method including contains, in, etc.
+  // Throws on error.
+  static async deleteModels(tableName, where = []) {
+    const Supabase = useSupabaseClient();
+    let query = Supabase.from(tableName).delete();
+    for (let clause of where) {
+      let column = clause.at(0);
+      let operator = clause.at(1);
+      let value = clause.at(2);
+      if (typeof query[operator] === 'function') {
+        query = query[operator](column, value);
+      }
+    }
+    const { error } = await query;
+    if (error) {
+      consoleError("SupaModels.deleteModels", tableName, error);
+      throw error;
+    }
+  }
+
   // Returns the total count of rows in tableName matching the given where clauses.
   // where — array of [column, operator, value] triples (same format as loadModels).
   // Returns 0 on error.
