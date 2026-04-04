@@ -4,7 +4,6 @@ export default class SupaModel extends Model {
 
   constructor(data = {}) {
     super(data);
-    Object.assign(this, data);
   }
   
   static async load(id) {
@@ -83,7 +82,7 @@ export default class SupaModel extends Model {
       }
       const { error } = await query.delete();
       if (error) {
-        consoleLog("SupaModel.deleteModel", modelClass.name, error);
+        consoleError("SupaModel.deleteModel", modelClass.name, error);
         return false;
       }
       return true;

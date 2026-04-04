@@ -12,45 +12,13 @@ export default class SupaModels extends Models {
     let query = Supabase.from(tableName).select(select);
     query = query.range(offset, offset+limit-1);
     if (where && where.length > 0) {
+      const wrapLike = new Set(["ilike", "like"]);
       for (let clause of where) {
         let column = clause.at(0);
         let operator = clause.at(1);
         let value = clause.at(2);
-        if (operator == "eq") {
-          query = query.eq(column, value);
-        }
-        else if (operator == "gt") {
-          query = query.gt(column, value);
-        }
-        else if (operator == "lt") {
-          query = query.lt(column, value);
-        }
-        else if (operator == "gte") {
-          query = query.gte(column, value);
-        }
-        else if (operator == "lte") {
-          query = query.lte(column, value);
-        }
-        else if (operator == "ilike") {
-          query = query.ilike(column, `%${value}%`);
-        }
-        else if (operator == "like") {
-          query = query.like(column, `%${value}%`);
-        }
-        else if (operator == "is") {
-          query = query.is(column, value);
-        }
-        else if (operator == "in") {
-          query = query.in(column, value);
-        }
-        else if (operator == "cs") {
-          query = query.cs(column, value);
-        }
-        else if (operator == "cd") {
-          query = query.cd(column, value);
-        }
-        else if (operator == "neq") {
-          query = query.neq(column, value);
+        if (typeof query[operator] === 'function') {
+          query = query[operator](column, wrapLike.has(operator) ? `%${value}%` : value);
         }
       }
     }

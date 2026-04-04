@@ -1,4 +1,5 @@
 import Models from './Models';
+import RestModel from './RestModel';
 
 export default class RestModels extends Models {
 
@@ -9,7 +10,7 @@ export default class RestModels extends Models {
   static async loadModels(collectionClass, modelClass, url, params = {}) {
     let collection = new collectionClass();
     const { error, data: results } = await useFetch(url, {
-      key: RestModels.urlQuery(url, params),
+      key: RestModel.urlQuery(url, params),
       params: params
     });
     if (error.value) {
@@ -24,16 +25,6 @@ export default class RestModels extends Models {
       }
     }
     return collection;
-  }
-
-  static urlQuery(url, params ={}) {
-    const urlPath = new URL(url);
-    if (params) {
-      for (let key in params) {
-        urlPath.searchParams.append(key, params[key]);
-      }
-    }
-    return urlPath.href;
   }
 
 }

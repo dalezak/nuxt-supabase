@@ -12,7 +12,6 @@ export default class User extends SupaModel {
   
   constructor(data = {}) {
     super(data);
-    Object.assign(this, data);
   }
 
   async store() {

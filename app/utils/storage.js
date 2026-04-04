@@ -35,173 +35,110 @@ export class Storage {
   }
 
   async keys(prefix = null) {
-    if (import.meta.client) {
-      return await this.unstorage.getKeys(prefix);
-    }
-    return [];
+    if (!this.unstorage) return [];
+    return await this.unstorage.getKeys(prefix);
   }
 
   async get(key) {
-    if (import.meta.client) {
-      return await this.unstorage.getItem(key);
-    }
-    return null;
+    if (!this.unstorage) return null;
+    return await this.unstorage.getItem(key);
   }
 
   async set(key, value) {
-    if (import.meta.client) {
-      if (value) {
-        return await this.unstorage.setItem(key, value);
-      }
-      return await this.unstorage.setItem(key, null);
-    }
-    return null;
+    if (!this.unstorage) return null;
+    return await this.unstorage.setItem(key, value ?? null);
   }
 
   // Note: loads all keys and items for the given prefix into memory before filtering.
   // Fine for small datasets; avoid for large collections.
   async count(prefix, needle = "", haystack = null) {
-    if (import.meta.client) {
-      let counts = 0;
-      let keys = await this.unstorage.getKeys(prefix);
-      let search = needle && needle.length > 0 ? needle.toLowerCase() : "";
-      for (let key of keys) {
-        const item = await this.get(key);
-        if (item) {
-          if (search && search.length > 0) {
-            if (haystack && haystack.length > 0) {
-              for (let attribute of haystack.split(",")) {
-                let value = item[attribute];
-                if (value && Array.isArray(value) && value.includes(search)) {
-                  counts = counts + 1;
-                  break;
-                }
-                else if (value && value.toString().toLowerCase().indexOf(search) != -1) {
-                  counts = counts + 1;
-                  break;
-                }
-              }
-            }
-            else {
-              for (let value of Object.values(item)) {
-                if (value && value.toString().toLowerCase().indexOf(search) != -1) {
-                  counts = counts + 1;
-                  break;
-                }
-              }
-            }
-          }
-          else {
-            counts = counts + 1;
-          }
-        }
+    if (!this.unstorage) return 0;
+    let counts = 0;
+    const keys = await this.unstorage.getKeys(prefix);
+    const search = needle && needle.length > 0 ? needle.toLowerCase() : "";
+    for (let key of keys) {
+      const item = await this.get(key);
+      if (item && this._matches(item, search, haystack)) {
+        counts++;
       }
-      return counts;
     }
-    return 0;
+    return counts;
   }
 
   // Note: loads all keys and items for the given prefix into memory before filtering.
   // Fine for small datasets; avoid for large collections.
   async search(prefix, needle = "", haystack = null, offset = 0, limit = 100, sort = null) {
-    if (import.meta.client) {
-      let results = [];
-      let keys = await this.unstorage.getKeys(prefix);
-      let search = needle && needle.length > 0 ? needle.toLowerCase() : "";
-      for (let key of keys) {
-        const item = await this.get(key);
-        if (item) {
-          if (search && search.length > 0) {
-            if (haystack && haystack.length > 0) {
-              for (let attribute of haystack.split(",")) {
-                let value = item[attribute];
-                if (value && Array.isArray(value) && value.includes(search)) {
-                  results.push(item);
-                  break;
-                }
-                else if (value && value.toString().toLowerCase().indexOf(search) != -1) {
-                  results.push(item);
-                  break;
-                }
-              }
-            }
-            else {
-              for (let value of Object.values(item)) {
-                if (value && value.toString().toLowerCase().indexOf(search) != -1) {
-                  results.push(item);
-                  break;
-                }
-              }
-            }
-          }
-          else {
-            results.push(item);
-          }
-        }
+    if (!this.unstorage) return [];
+    let results = [];
+    const keys = await this.unstorage.getKeys(prefix);
+    const search = needle && needle.length > 0 ? needle.toLowerCase() : "";
+    for (let key of keys) {
+      const item = await this.get(key);
+      if (item && this._matches(item, search, haystack)) {
+        results.push(item);
       }
-      if (sort && sort.length > 0) {
-        return results.sort(sortByProperties(sort.split(","))).slice(offset, offset + limit);
-      }
-      return results.slice(offset, offset + limit);
     }
-    return [];
+    if (sort && sort.length > 0) {
+      results = results.sort(this.sortByProperties(sort.split(",")));
+    }
+    return results.slice(offset, offset + limit);
   }
 
   async remove(key) {
-    if (import.meta.client) {
-      return await this.unstorage.removeItem(key);
-    }
-    return null;
+    if (!this.unstorage) return null;
+    return await this.unstorage.removeItem(key);
   }
 
   async clear(prefix = null) {
-    if (import.meta.client) {
-      if (prefix && prefix.length > 0) {
-        let keys = await this.unstorage.getKeys(prefix);
-        for (let key of keys) {
-          await this.unstorage.removeItem(key);
-        }
-        return true;
+    if (!this.unstorage) return null;
+    if (prefix && prefix.length > 0) {
+      const keys = await this.unstorage.getKeys(prefix);
+      for (let key of keys) {
+        await this.unstorage.removeItem(key);
       }
-      return await this.unstorage.clear();
+      return true;
     }
-    return null;
+    return await this.unstorage.clear();
+  }
+
+  _matches(item, search, haystack) {
+    if (!search || search.length === 0) return true;
+    const attributes = haystack && haystack.length > 0 ? haystack.split(",") : null;
+    const values = attributes ? attributes.map(attr => item[attr]) : Object.values(item);
+    for (let value of values) {
+      if (value && Array.isArray(value) && value.includes(search)) return true;
+      if (value && value.toString().toLowerCase().indexOf(search) !== -1) return true;
+    }
+    return false;
   }
 
   sortByProperties(properties) {
-    if (import.meta.client) {
-      return (a, b) => {
-        let i = 0;
-        let result = 0;
-        let numberOfProperties = properties.length;
-        while (result === 0 && i < numberOfProperties) {
-          result = this.sortByProperty(properties[i])(a, b);
-          i++;
-        }
-        return result;
-      };
-    }
-    return [];
+    return (a, b) => {
+      let i = 0;
+      let result = 0;
+      while (result === 0 && i < properties.length) {
+        result = this.sortByProperty(properties[i])(a, b);
+        i++;
+      }
+      return result;
+    };
   }
 
   sortByProperty(property) {
-    if (import.meta.client) {
-      let sortOrder = 1;
-      if (property[0] === "-") {
-        sortOrder = -1;
-        property = property.slice(1);
-      }
-      return (a, b) => {
-        if (typeof a[property] == "boolean") {
-          return ((a[property] === b[property]) ? 0 : a[property] ? -1 : 1) * sortOrder;
-        }
-        if (typeof a[property] == "number") {
-          return (a[property] - b[property]) * sortOrder;
-        }
-        return ((a[property] < b[property]) ? -1 : (a[property] > b[property])) * sortOrder;
-      };
+    let sortOrder = 1;
+    if (property[0] === "-") {
+      sortOrder = -1;
+      property = property.slice(1);
     }
-    return [];
+    return (a, b) => {
+      if (typeof a[property] === "boolean") {
+        return ((a[property] === b[property]) ? 0 : a[property] ? -1 : 1) * sortOrder;
+      }
+      if (typeof a[property] === "number") {
+        return (a[property] - b[property]) * sortOrder;
+      }
+      return ((a[property] < b[property]) ? -1 : (a[property] > b[property])) * sortOrder;
+    };
   }
 
   configAppName() {

@@ -4,7 +4,6 @@ export default class RestModel extends Model {
 
   constructor(data = {}) {
     super(data);
-    Object.assign(this, data);
   }
   
   static async load(id) {
@@ -69,10 +68,12 @@ export default class RestModel extends Model {
     return false;
   }
 
-  static urlQuery(url, params ={}) {
+  static urlQuery(url, params = {}) {
     const urlPath = new URL(url);
-    for (let key in params) {
-      urlPath.searchParams.append(key, params[key]);
+    if (params) {
+      for (let key in params) {
+        urlPath.searchParams.append(key, params[key]);
+      }
     }
     return urlPath.href;
   }
