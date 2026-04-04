@@ -22,6 +22,7 @@ export default class SupaModel extends Model {
     const Supabase = useSupabaseClient();
     let query = Supabase.from(table).select("*");
     for (let key of Object.keys(where)) {
+      if (where[key] == null) return null;
       query = query.eq(key, where[key]);
     }
     let { data: row, error } = await query.single();

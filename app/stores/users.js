@@ -30,8 +30,10 @@ export const useUsersStore = defineStore("users", {
         }
         else {
           let profile = await User.profile();
-          if (profile) {
+          if (profile?.id) {
             await profile.store();
+          } else {
+            profile = null;
           }
           this.profile = profile;
           return Promise.resolve(profile);

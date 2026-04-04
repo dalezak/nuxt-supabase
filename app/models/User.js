@@ -12,6 +12,7 @@ export default class User extends SupaModel {
   
   constructor(data = {}) {
     super(data);
+    Object.assign(this, data);
   }
 
   async store() {
@@ -55,6 +56,7 @@ export default class User extends SupaModel {
     const supabaseUser = useSupabaseUser();
     if (supabaseUser && supabaseUser.value) {
       let user_id = supabaseUser.value.id;
+      if (!user_id) return null;
       let user = await User.restore(user_id) || await User.load(user_id);
       consoleLog("User.profile", user);
       return user;

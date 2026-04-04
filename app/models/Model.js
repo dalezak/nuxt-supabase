@@ -41,7 +41,7 @@ export default class Model {
   static async restoreModel(modelClass, key) {
     const Storage = useStorage();
     let data = await Storage.get(key);
-    if (data) {
+    if (data?.id) {
       let model = new modelClass(data);
       // consoleLog("Model.restoreModel", modelClass.name, key, data);
       return model;
