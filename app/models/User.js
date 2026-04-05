@@ -39,6 +39,12 @@ export default class User extends SupaModel {
     return this.saveModel(User, "users", ["id", "name", "email", "avatar_url"]);
   }
 
+  // Returns the best available avatar URL: uploaded photo, then Gravatar, then null.
+  static async avatarUrl(email, uploadedUrl = null) {
+    if (uploadedUrl) return uploadedUrl;
+    return gravatarUrl(email);
+  }
+
   // Uploads a file to the avatars bucket and updates avatar_url in the DB.
   // Returns the public URL on success, null on error.
   async uploadAvatar(file) {
