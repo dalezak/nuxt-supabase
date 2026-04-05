@@ -6,6 +6,7 @@ export default class User extends SupaModel {
 
   name = null;
   email = null;
+  avatar_url = null;
 
   created_at = null;
   updated_at = null;
@@ -32,10 +33,27 @@ export default class User extends SupaModel {
     return await SupaModel.loadModel(User, "users", { id: id });
   }
 
-  // Upserts this user to Supabase (id, name, email).
+  // Upserts this user to Supabase (id, name, email, avatar_url).
   // Returns a fresh User from the DB response, or null on error.
   async save() {
-    return this.saveModel(User, "users", ["id", "name", "email"]);
+    return this.saveModel(User, "users", ["id", "name", "email", "avatar_url"]);
+  }
+
+  // Uploads a file to the avatars bucket and updates avatar_url in the DB.
+  // Returns the public URL on success, null on error.
+  async uploadAvatar(file) {
+    const Supabase = useSupabaseClient();
+    const ext = file.name.split('.').pop();
+    const path = `${this.id}/avatar.${ext}`;
+    const { error: uploadError } = await Supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true });
+    if (uploadError) { consoleError('User.uploadAvatar', uploadError); return null; }
+    const { data } = Supabase.storage.from('avatars').getPublicUrl(path);
+    const url = `${data.publicUrl}?t=${Date.now()}`;
+    this.avatar_url = url;
+    await this.save();
+    return url;
   }
 
   // Initiates Google OAuth sign-in (redirect flow).
