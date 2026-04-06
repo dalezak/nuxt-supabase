@@ -60,10 +60,11 @@ export default class SupaModel extends Model {
 
   // Upserts a row into table. onConflict is a comma-separated string of
   // conflict columns, e.g. 'user_id,question_id'.
+  // ignoreDuplicates — if true, do nothing on conflict (don't overwrite existing row).
   // Does not return the upserted row. Throws on error.
-  static async upsertModel(table, values, onConflict) {
+  static async upsertModel(table, values, onConflict, ignoreDuplicates = false) {
     const Supabase = useSupabaseClient();
-    const { error } = await Supabase.from(table).upsert(values, { onConflict });
+    const { error } = await Supabase.from(table).upsert(values, { onConflict, ignoreDuplicates });
     if (error) {
       consoleError("SupaModel.upsertModel", table, error);
       throw error;
