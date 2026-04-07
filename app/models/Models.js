@@ -43,4 +43,40 @@ export default class Models extends Array {
     }
   }
 
+  // Override in subclasses to restore a collection from local storage.
+  // Typically delegates to restoreModels(). Returns null by default.
+  static async restore() {
+    return null;
+  }
+
+  // Reads a collection from local storage and returns a collectionClass instance
+  // populated with modelClass instances. Mirrors the loadModels() signature so
+  // callers can swap between DB and cache transparently.
+  //   prefix   — storage key prefix, e.g. 'users'
+  //   search   — optional search string filtered across item fields
+  //   offset   — pagination offset
+  //   limit    — max items to return
+  //   sort     — comma-separated sort fields, prefix with '-' for descending, e.g. '-created_at'
+  //   haystack — comma-separated field names to restrict search to, or null for all fields
+  // Always returns a collection (never null), empty if nothing is found.
+  static async restoreModels(collectionClass, modelClass, prefix, search = "", offset = 0, limit = 10, sort = "created_at", haystack = null) {
+    const Storage = useStorage();
+    const collection = new collectionClass();
+    const items = await Storage.search(prefix, search, haystack, offset, limit, sort);
+    for (let item of items ?? []) {
+      collection.push(new modelClass(item));
+    }
+    return collection;
+  }
+
+  // Returns the number of items in local storage under prefix matching search.
+  //   prefix   — storage key prefix, e.g. 'users'
+  //   search   — optional search string filtered across item fields
+  //   haystack — comma-separated field names to restrict search to, or null for all fields
+  // Use this to decide whether to restore from cache or load from DB.
+  // Returns 0 if storage is unavailable or no items match.
+  static async countModels(prefix, search = "", haystack = null) {
+    const Storage = useStorage();
+    return await Storage.count(prefix, search, haystack);
+  }
 }
