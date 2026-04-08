@@ -21,18 +21,23 @@ export function createSupaStore(name, ModelClass, CollectionClass) {
     },
     actions: {
       async loadItems({ limit = 10, offset = 0, search = null, refresh = false, params = {} } = {}) {
+        consoleLog(`[${name}] loadItems called (refresh=${refresh}, offset=${offset}, items=${this.items?.length ?? 'null'})`);
         try {
           // In-memory hit: first page already loaded, skip all I/O
           if (!refresh && offset === 0 && this.items != null && this.items.length <= limit) {
+            consoleLog(`[${name}] loadItems memory cache (${this.items.length} items)`);
             return Promise.resolve(this.items);
           }
           let items = null;
           // Only use cache for the first page — we can't know if later pages are cached
-          const useCache = !refresh && offset === 0 && (await CollectionClass.count(search, params)) > 0;
+          const cacheCount = !refresh && offset === 0 ? await CollectionClass.count(search, params) : 0;
+          const useCache = cacheCount > 0;
           if (useCache) {
+            consoleLog(`[${name}] loadItems local storage (${cacheCount} cached)`);
             items = await CollectionClass.restore(limit, offset, search, params);
           }
           else {
+            consoleLog(`[${name}] loadItems supabase fetch (refresh=${refresh}, offset=${offset}, cacheCount=${cacheCount})`);
             items = await CollectionClass.load(limit, offset, search, params);
             if (items) await items.store();
           }
