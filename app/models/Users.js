@@ -8,15 +8,21 @@ export default class Users extends SupaModels {
   }
 
   static async clear() {
-    return SupaModels.clearModels("users");
+    return this.clearModels("users");
   }
 
-  static async count(search = "", params = {}) {
-    return Models.countModels("users", search, ["name"], params);
+  // Returns count from local storage — used by createSupaStore cache check.
+  static async stored(search = "", _params = {}) {
+    return this.storedModels("users/", search, "name");
+  }
+
+  static async count(search = "", _params = {}) {
+    const where = search?.length > 0 ? [["name", "ilike", search]] : [];
+    return SupaModels.countModels("users", where);
   }
 
   static async restore(limit = 10, offset = 0, search = "", params = {}) {
-    return Models.restoreModels(Users, User, "users/", search, offset, limit, params);
+    return this.restoreModels(Users, User, "users/", search, offset, limit, params);
   }
 
   static async load(limit = 10, offset = 0, search = "", _params = {}) {
@@ -24,7 +30,7 @@ export default class Users extends SupaModels {
     if (search && search.length > 0) {
       where.push(["name", "ilike", search.toLowerCase()]);
     }
-    return SupaModels.loadModels(Users, User, "users", {
+    return this.loadModels(Users, User, "users", {
       order: "created_at:desc",
       limit: limit,
       offset: offset,

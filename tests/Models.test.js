@@ -123,4 +123,56 @@ describe('Models', () => {
     })
   })
 
+  describe('storedModels()', () => {
+    it('calls Storage.count() with prefix, search, and haystack', async () => {
+      const mockStorage = { count: vi.fn().mockResolvedValue(5) }
+      vi.stubGlobal('useStorage', () => mockStorage)
+
+      await Models.storedModels('users/', 'alice', 'name')
+
+      expect(mockStorage.count).toHaveBeenCalledWith('users/', 'alice', 'name')
+    })
+
+    it('passes null haystack by default', async () => {
+      const mockStorage = { count: vi.fn().mockResolvedValue(3) }
+      vi.stubGlobal('useStorage', () => mockStorage)
+
+      await Models.storedModels('users/', 'bob')
+
+      expect(mockStorage.count).toHaveBeenCalledWith('users/', 'bob', null)
+    })
+
+    it('returns the count from Storage.count()', async () => {
+      const mockStorage = { count: vi.fn().mockResolvedValue(7) }
+      vi.stubGlobal('useStorage', () => mockStorage)
+
+      const result = await Models.storedModels('users/')
+      expect(result).toBe(7)
+    })
+  })
+
+  describe('stored()', () => {
+    it('returns 0 by default', async () => {
+      const result = await Models.stored()
+      expect(result).toBe(0)
+    })
+
+    it('returns 0 regardless of search param', async () => {
+      const result = await Models.stored('anything')
+      expect(result).toBe(0)
+    })
+  })
+
+  describe('count()', () => {
+    it('returns 0 by default', async () => {
+      const result = await Models.count()
+      expect(result).toBe(0)
+    })
+
+    it('returns 0 regardless of search param', async () => {
+      const result = await Models.count('anything')
+      expect(result).toBe(0)
+    })
+  })
+
 })

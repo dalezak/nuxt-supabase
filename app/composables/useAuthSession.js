@@ -4,13 +4,13 @@ const _isAuthenticated = ref(false);
 let _initialized = false;
 
 export function useAuthSession() {
+  // useSupabaseUser() works on both server and client via @nuxtjs/supabase
+  const user = useSupabaseUser();
+  _isAuthenticated.value = !!user.value;
+
   if (import.meta.client && !_initialized) {
     _initialized = true;
     const supabase = useSupabaseClient();
-    // Sync current session immediately
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      _isAuthenticated.value = !!session?.user;
-    });
     // Stay in sync on every auth change
     supabase.auth.onAuthStateChange((_event, session) => {
       _isAuthenticated.value = !!session?.user;

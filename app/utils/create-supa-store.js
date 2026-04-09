@@ -1,85 +1,87 @@
 import { defineStore } from 'pinia';
 
-export function createSupaStore(name, ModelClass, CollectionClass) {
-  return defineStore(name, {
-    state: () => ({
-      item: null,
-      items: null
-    }),
-    getters: {
-      getItems(state) {
-        return state.items;
-      },
-      getItem(state) {
-        return (id) => {
-          if (state.items && state.items.length > 0 && id) {
-            return state.items.find(item => item.id == id);
-          }
-          return state.item;
-        };
-      }
-    },
-    actions: {
-      async loadItems({ limit = 10, offset = 0, search = null, refresh = false, params = {} } = {}) {
-        consoleLog(`[${name}] loadItems called (refresh=${refresh}, offset=${offset}, items=${this.items?.length ?? 'null'})`);
-        try {
-          // In-memory hit: first page already loaded, skip all I/O
-          if (!refresh && offset === 0 && this.items != null && this.items.length <= limit) {
-            consoleLog(`[${name}] loadItems memory cache (${this.items.length} items)`);
-            return Promise.resolve(this.items);
-          }
-          let items = null;
-          // Only use cache for the first page — we can't know if later pages are cached
-          const cacheCount = !refresh && offset === 0 ? await CollectionClass.count(search, params) : 0;
-          const useCache = cacheCount > 0;
-          if (useCache) {
-            consoleLog(`[${name}] loadItems local storage (${cacheCount} cached)`);
-            items = await CollectionClass.restore(limit, offset, search, params);
-          }
-          else {
-            consoleLog(`[${name}] loadItems supabase fetch (refresh=${refresh}, offset=${offset}, cacheCount=${cacheCount})`);
-            items = await CollectionClass.load(limit, offset, search, params);
-            if (items) await items.store();
-          }
-          if (offset > 0) {
-            if (items) this.items = [...(this.items ?? []), ...items];
-          }
-          else {
-            this.items = items;
-          }
-          return Promise.resolve(items);
+export function createSupaStore(name, ModelClass, CollectionClass, extend = () => ({})) {
+  return defineStore(name, () => {
+    const item = ref(null);
+    const items = ref(null);
+
+    const getItems = computed(() => items.value);
+    const getItem = computed(() => (id) => {
+      if (items.value?.length > 0 && id) return items.value.find(i => i.id == id);
+      return item.value;
+    });
+
+    async function loadItems({ limit = 10, offset = 0, search = null, refresh = false, params = {} } = {}) {
+      consoleLog(`[${name}] loadItems called (refresh=${refresh}, offset=${offset}, items=${items.value?.length ?? 'null'})`);
+      try {
+        if (!refresh && offset === 0 && items.value != null && items.value.length <= limit) {
+          consoleLog(`${name} loadItems memory cache (${items.value.length} items)`);
+          return items.value;
         }
-        catch (error) {
-          return Promise.reject(error);
+        let loaded = null;
+        const storedCount = !refresh && offset === 0 ? await CollectionClass.stored(search, params) : 0;
+        if (storedCount > 0) {
+          consoleLog(`${name} loadItems local storage (${storedCount} cached)`);
+          loaded = await CollectionClass.restore(limit, offset, search, params);
+        } else {
+          consoleLog(`${name} loadItems supabase fetch (refresh=${refresh}, offset=${offset})`);
+          loaded = await CollectionClass.load(limit, offset, search, params);
+          if (loaded) await loaded.store();
         }
-      },
-      async loadItem({ id }) {
-        try {
-          let item = await ModelClass.load(id);
-          if (item) {
-            await item.store();
-          }
-          this.item = item;
-          return Promise.resolve(item);
+        if (offset > 0) {
+          if (loaded) items.value = [...(items.value ?? []), ...loaded];
+        } else {
+          items.value = loaded;
         }
-        catch (error) {
-          return Promise.reject(error);
-        }
-      },
-      async saveItem(data) {
-        try {
-          let item = await new ModelClass(data).save();
-          if (item) {
-            await item.store();
-          }
-          this.item = item;
-          this.items = null; // Invalidate list so next loadItems re-fetches from DB
-          return Promise.resolve(item);
-        }
-        catch (error) {
-          return Promise.reject(error);
-        }
+        return loaded;
+      } catch (error) {
+        return Promise.reject(error);
       }
     }
+
+    async function loadItem({ id }) {
+      try {
+        let loaded = await ModelClass.load(id);
+        if (loaded) await loaded.store();
+        item.value = loaded;
+        return loaded;
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+
+    async function saveItem(data) {
+      try {
+        let saved = await new ModelClass(data).save();
+        if (saved) await saved.store();
+        item.value = saved;
+        items.value = null;
+        return saved;
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+
+    async function deleteItem(id) {
+      try {
+        await new ModelClass({ id }).delete();
+        if (items.value) items.value = items.value.filter(i => i.id !== id);
+        if (item.value?.id === id) item.value = null;
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+
+    return {
+      item,
+      items,
+      getItems,
+      getItem,
+      loadItems,
+      loadItem,
+      saveItem,
+      deleteItem,
+      ...extend({ item, items }),
+    };
   });
 }

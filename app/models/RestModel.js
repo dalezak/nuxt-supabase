@@ -29,7 +29,7 @@ export default class RestModel extends Model {
   // Returns null on error or empty response.
   static async loadModel(modelClass, url, params = {}) {
     const { error, data: response } = await useFetch(url, {
-      key: RestModel.urlQuery(url, params),
+      key: this.urlQuery(url, params),
       params: params
     });
     if (error.value) {

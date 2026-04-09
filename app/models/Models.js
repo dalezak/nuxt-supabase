@@ -13,8 +13,8 @@ export default class Models extends Array {
   }
 
   // Removes all items from local storage under prefix.
-  // Delegates to Storage.clear(prefix). Call from a static clear() on the
-  // subclass, e.g: static async clear() { return Models.clearModels('users') }
+  // Delegates to Storage.clear(prefix). Call from a static clear() on the subclass,
+  // e.g: static async clear() { return this.clearModels('users') }
   static async clearModels(prefix) {
     const Storage = useStorage();
     // consoleLog("Models.clearModels", this.name, prefix);
@@ -52,7 +52,7 @@ export default class Models extends Array {
   // Reads a collection from local storage and returns a collectionClass instance
   // populated with modelClass instances. Mirrors the loadModels() signature so
   // callers can swap between DB and cache transparently.
-  //   prefix   — storage key prefix, e.g. 'users'
+  //   prefix   — storage key prefix, e.g. 'users/'
   //   search   — optional search string filtered across item fields
   //   offset   — pagination offset
   //   limit    — max items to return
@@ -70,13 +70,28 @@ export default class Models extends Array {
   }
 
   // Returns the number of items in local storage under prefix matching search.
-  //   prefix   — storage key prefix, e.g. 'users'
+  // The low-level primitive — subclasses call this from their stored() override.
+  //   prefix   — storage key prefix, e.g. 'users/'
   //   search   — optional search string filtered across item fields
   //   haystack — comma-separated field names to restrict search to, or null for all fields
-  // Use this to decide whether to restore from cache or load from DB.
   // Returns 0 if storage is unavailable or no items match.
-  static async countModels(prefix, search = "", haystack = null) {
+  static async storedModels(prefix, search = "", haystack = null) {
     const Storage = useStorage();
     return await Storage.count(prefix, search, haystack);
   }
+
+  // Override in subclasses to return the count of locally stored items.
+  // Always checks local storage — never hits the remote DB or API.
+  // Used by createSupaStore to decide whether to restore from cache or load remotely.
+  // Returns 0 by default.
+  static async stored(_search = "", _params = {}) {
+    return 0;
+  }
+
+  // Override in subclasses to return the remote count (DB or API).
+  // Returns 0 by default.
+  static async count(_search = "", _params = {}) {
+    return 0;
+  }
+
 }

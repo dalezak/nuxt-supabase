@@ -24,13 +24,13 @@ export default class User extends SupaModel {
   // Reads a user from local storage by id (cache lookup).
   // Returns null on cache miss — call load() as fallback.
   static async restore(id) {
-    return await SupaModel.restoreModel(User, `users/${id}`);
+    return await this.restoreModel(User, `users/${id}`);
   }
 
   // Loads a user from Supabase by id.
   // Try restore() first to avoid the DB round-trip.
   static async load(id) {
-    return await SupaModel.loadModel(User, "users", { id: id });
+    return await this.loadModel(User, "users", { id: id });
   }
 
   // Upserts this user to Supabase (id, name, email, avatar_url).

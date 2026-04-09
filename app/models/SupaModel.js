@@ -27,12 +27,18 @@ export default class SupaModel extends Model {
   // Like loadModel but uses maybeSingle() — returns null when no row matches
   // without treating zero rows as an error. Use for optional lookups (e.g. find
   // user by email) where the record may legitimately not exist.
-  static async findModel(modelClass, table, where = {}) {
+  //   where   — plain object of AND equality conditions: { email: 'alice@example.com' }
+  //   select  — Supabase select string, default '*'
+  //   or      — Supabase OR filter string, e.g. 'user_id.eq.123,friend_id.eq.123'
+  static async findModel(modelClass, table, where = {}, { select = '*', or = null } = {}) {
     const Supabase = useSupabaseClient();
-    let query = Supabase.from(table).select("*");
+    let query = Supabase.from(table).select(select);
     for (let key of Object.keys(where)) {
       if (where[key] == null) return null;
       query = query.eq(key, where[key]);
+    }
+    if (or) {
+      query = query.or(or);
     }
     let { data: row, error } = await query.maybeSingle();
     if (error) {

@@ -163,6 +163,9 @@ export const useUsersStore = defineStore("users", {
         consoleError("UsersStore.updatePassword", error);
         return Promise.reject(error);
       }
+    },
+    async avatarUrl(email, uploadedUrl = null) {
+      return User.avatarUrl(email, uploadedUrl);
     }
   }
 });

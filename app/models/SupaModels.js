@@ -57,17 +57,20 @@ export default class SupaModels extends Models {
   // modelClass instances.
   //
   // Options:
-  //   select  — Supabase select string, default '*'
-  //   limit   — max rows to return, default 10
-  //   offset  — row offset for pagination, default 0
-  //   order   — 'column:asc' or 'column:desc', e.g. 'created_at:desc'
-  //   where   — array of [column, operator, value] triples, e.g.:
-  //               [['name', 'eq', 'Alice'], ['age', 'gte', 18]]
-  //             Supported operators: eq, neq, gt, lt, gte, lte, ilike,
-  //             like, is, in, cs, cd. ilike/like auto-wrap value in %.
+  //   select    — Supabase select string, default '*'. Supports joins e.g. '*, users(id, name)'
+  //   limit     — max rows to return, default 10
+  //   offset    — row offset for pagination, default 0
+  //   order     — 'column:asc' or 'column:desc', e.g. 'created_at:desc'
+  //   where     — array of [column, operator, value] triples, e.g.:
+  //                 [['name', 'eq', 'Alice'], ['age', 'gte', 18]]
+  //               Supported operators: eq, neq, gt, lt, gte, lte, ilike,
+  //               like, is, not, in, cs, cd. ilike/like auto-wrap value in %.
+  //   or        — Supabase OR filter string, e.g. 'user_id.eq.123,friend_id.eq.123'
+  //   transform — optional function(row) => modelClass instance, for when rows need
+  //               reshaping before hydration (e.g. joining awards → Badge instances)
   //
   // Returns an empty collection on error (never null).
-  static async loadModels(collectionClass, modelClass, tableName, { select = '*', limit = 10, offset = 0, where = [], order = null } = {}) {
+  static async loadModels(collectionClass, modelClass, tableName, { select = '*', limit = 10, offset = 0, where = [], order = null, or = null, transform = null } = {}) {
     const Supabase = useSupabaseClient();
     let collection = new collectionClass();
     let query = Supabase.from(tableName).select(select);
@@ -83,6 +86,9 @@ export default class SupaModels extends Models {
         }
       }
     }
+    if (or) {
+      query = query.or(or);
+    }
     if (order) {
       let sorting = order.split(":");
       let ordering = sorting.at(0);
@@ -96,7 +102,7 @@ export default class SupaModels extends Models {
     else if (rows && rows.length > 0) {
       consoleLog("SupaModels.loadModels", collectionClass.name, rows);
       for (let row of rows) {
-        let model = new modelClass(row);
+        let model = transform ? transform(row) : new modelClass(row);
         collection.push(model);
       }
     }
