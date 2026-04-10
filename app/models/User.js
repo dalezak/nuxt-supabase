@@ -8,6 +8,10 @@ export default class User extends SupaModel {
   email = null;
   avatar_url = null;
 
+  subscription_status = 'free';
+  subscription_expires_at = null;
+  subscription_platform = null;
+
   created_at = null;
   updated_at = null;
 
@@ -184,6 +188,17 @@ export default class User extends SupaModel {
       return true;
     }
     return false;
+  }
+
+  // Updates subscription fields for a user by id (called from webhook).
+  static async updateSubscription(userId, status, expiresAt, platform) {
+    const Supabase = useSupabaseClient();
+    const { error } = await Supabase
+      .from('users')
+      .update({ subscription_status: status, subscription_expires_at: expiresAt, subscription_platform: platform })
+      .eq('id', userId);
+    if (error) consoleError('User.updateSubscription', error);
+    return !error;
   }
 
   // Updates the password for the currently authenticated user.

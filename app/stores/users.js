@@ -1,171 +1,125 @@
-import { defineStore } from 'pinia';
-
 import Users from "../models/Users";
 import User from "../models/User";
 
-export const useUsersStore = defineStore("users", {
-  state: () => {
-    return {
-      profile: null,
-      user: null,
-      users: null
-    }
-  },
-  getters: {
-    getProfile(state) {
-      return state.profile;
-    },
-    getUser(state) {
-      return state.user;
-    },
-    getUsers(state) {
-      return state.users;
-    }
-  },
-  actions: {
-    async loadProfile() {
-      try {
-        if (this.profile) {
-          return Promise.resolve(this.profile);
-        }
-        const client = useSupabaseClient();
-        const { data: { user: authUser } } = await client.auth.getUser();
-        const user_id = authUser?.id;
-        if (!user_id) return Promise.resolve(null);
-        let profile = await User.profile(user_id);
-        if (profile?.id) {
-          await profile.store();
-        } else {
-          profile = null;
-        }
-        this.profile = profile;
-        return Promise.resolve(profile);
+export const useUsersStore = createSupaStore('users', User, Users, ({ item, items }) => {
+  const profile = ref(null);
+
+  async function loadProfile() {
+    try {
+      if (profile.value) return profile.value;
+      const client = useSupabaseClient();
+      const { data: { user: authUser } } = await client.auth.getUser();
+      const user_id = authUser?.id;
+      if (!user_id) return null;
+      let user = await User.profile(user_id);
+      if (user?.id) {
+        await user.store();
+      } else {
+        user = null;
       }
-      catch (error) {
-        consoleError("UsersStore.loadProfile", error);
-        return Promise.reject(error);
-      }
-    },
-    async loadUser({id}) {
-      try {
-        let user = await User.load(id);
-        if (user) {
-          await user.store();
-        }
-        this.user = user;
-        return Promise.resolve(user);
-      }
-      catch (error) {
-        consoleError("UsersStore.loadUser", error);
-        return Promise.reject(error);
-      }
-    },
-    async loadUsers({limit = 10, offset = 0, search = null}) {
-      try {
-        let users = await Users.load(limit, offset, search);
-        if (users) {
-          await users.store();
-        }
-        if (offset > 0) {
-          if (this.users == null) {
-            this.users = [];
-          }
-          this.users = [...this.users, ...users];
-        }
-        else {
-          this.users = users;
-        }
-        return Promise.resolve(users);
-      }
-      catch (error) {
-        consoleError("UsersStore.loadUsers", error);
-        return Promise.reject(error);
-      }
-    },
-    async googleSignin() {
-      try {
-        let user = await User.google();
-        if (user) {
-          user = await user.save();
-          await user.store();
-          user = await User.load(user.id);
-        }
-        this.profile = user;
-        return Promise.resolve(user);
-      }
-      catch (error) {
-        consoleError("UsersStore.googleSignin", error);
-        return Promise.reject(error);
-      }
-    },
-    async userLogin({email, password}) {
-      try {
-        consoleLog("UsersStore.userLogin", email);
-        let user = await User.login(email, password);
-        if (user) {
-          await user.store();
-        }
-        this.profile = user;
-        return Promise.resolve(user);
-      }
-      catch (error) {
-        consoleError("UsersStore.userLogin", error);
-        return Promise.reject(error);
-      }
-    },
-    async userSignup({name, email, password}) {
-      try {
-        consoleLog("UsersStore.userSignup", name, email);
-        let user = await User.signup(email, password, name);
-        if (user) {
-          user.name = name;
-          user = await user.save();
-          user = await user.store();
-        }
-        this.profile = user;
-        return Promise.resolve(user);
-      }
-      catch (error) {
-        consoleError("UsersStore.userSignup", error);
-        return Promise.reject(error);
-      }
-    },
-    async userLogout() {
-      try {
-        await User.logout();
-        this.profile = null;
-        this.user = null;
-        this.users = null;
-        consoleLog("UsersStore.userLogout", "done");
-        return Promise.resolve();
-      }
-      catch (error) {
-        consoleError("UsersStore.userLogout", error);
-        return Promise.reject(error);
-      }
-    },
-    async resetPassword({email}) {
-      try {
-        await User.resetPassword(email);
-        return Promise.resolve();
-      }
-      catch (error) {
-        consoleError("UsersStore.resetPassword", error);
-        return Promise.reject(error);
-      }
-    },
-    async updatePassword({password}) {
-      try {
-        await User.updatePassword(password);
-        return Promise.resolve();
-      }
-      catch (error) {
-        consoleError("UsersStore.updatePassword", error);
-        return Promise.reject(error);
-      }
-    },
-    async avatarUrl(email, uploadedUrl = null) {
-      return User.avatarUrl(email, uploadedUrl);
+      profile.value = user;
+      return user;
+    } catch (error) {
+      consoleError("UsersStore.loadProfile", error);
+      return Promise.reject(error);
     }
   }
+
+  async function googleSignin() {
+    try {
+      let user = await User.google();
+      if (user) {
+        user = await user.save();
+        await user.store();
+        user = await User.load(user.id);
+      }
+      profile.value = user;
+      return user;
+    } catch (error) {
+      consoleError("UsersStore.googleSignin", error);
+      return Promise.reject(error);
+    }
+  }
+
+  async function userLogin({ email, password }) {
+    try {
+      consoleLog("UsersStore.userLogin", email);
+      let user = await User.login(email, password);
+      if (user) await user.store();
+      profile.value = user;
+      return user;
+    } catch (error) {
+      consoleError("UsersStore.userLogin", error);
+      return Promise.reject(error);
+    }
+  }
+
+  async function userSignup({ name, email, password }) {
+    try {
+      consoleLog("UsersStore.userSignup", name, email);
+      let user = await User.signup(email, password, name);
+      if (user) {
+        user.name = name;
+        user = await user.save();
+        user = await user.store();
+      }
+      profile.value = user;
+      return user;
+    } catch (error) {
+      consoleError("UsersStore.userSignup", error);
+      return Promise.reject(error);
+    }
+  }
+
+  async function userLogout() {
+    try {
+      await User.logout();
+      profile.value = null;
+      item.value = null;
+      items.value = null;
+      consoleLog("UsersStore.userLogout", "done");
+    } catch (error) {
+      consoleError("UsersStore.userLogout", error);
+      return Promise.reject(error);
+    }
+  }
+
+  async function resetPassword({ email }) {
+    try {
+      await User.resetPassword(email);
+    } catch (error) {
+      consoleError("UsersStore.resetPassword", error);
+      return Promise.reject(error);
+    }
+  }
+
+  async function updatePassword({ password }) {
+    try {
+      await User.updatePassword(password);
+    } catch (error) {
+      consoleError("UsersStore.updatePassword", error);
+      return Promise.reject(error);
+    }
+  }
+
+  async function avatarUrl(email, uploadedUrl = null) {
+    return User.avatarUrl(email, uploadedUrl);
+  }
+
+  async function uploadAvatar(userData, file) {
+    return new User(userData).uploadAvatar(file);
+  }
+
+  return {
+    profile,
+    loadProfile,
+    googleSignin,
+    userLogin,
+    userSignup,
+    userLogout,
+    resetPassword,
+    updatePassword,
+    avatarUrl,
+    uploadAvatar,
+  };
 });
