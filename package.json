@@ -18,13 +18,13 @@
   },
   "devDependencies": {
     "@nuxt/devtools": "latest",
-    "@nuxtjs/supabase": "^2.0.4",
+    "@nuxtjs/supabase": "^2.0.5",
     "@snaplet/copycat": "^6.0.0",
-    "eslint": "^10.1.0",
+    "eslint": "^10.2.0",
     "eslint-plugin-vue": "^10.8.0",
     "nuxt": "^4.4.2",
-    "vitest": "^3.2.4",
-    "vue": "^3.5.31",
+    "vitest": "^4.1.4",
+    "vue": "^3.5.32",
     "vue-router": "^5.0.4"
   },
   "dependencies": {
