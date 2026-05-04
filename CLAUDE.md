@@ -86,6 +86,40 @@ static async generate(topic, level) {
 
 Edge function secrets are set via `supabase secrets set KEY=value` — never via `runtimeConfig` or `.env` exposed to the client.
 
+#### Shared Edge Function helpers
+
+The layer ships reusable boilerplate under `supabase/functions/_shared/`. Apps copy these into their own `_shared/` via the `npm run supabase` script (alongside migrations) and import them with relative paths from each function (`../_shared/...`).
+
+- `claude.ts` — `callClaude({ model, system, user, max_tokens, thinking, effort })` returns `{ text, raw, truncated }`. Default model is `claude-opus-4-7`; callers override per task. `parseJSON(text)` strips ```json fences and parses.
+- `edge.ts` — `serveEdge(handler)` wraps `Deno.serve` with CORS preflight + try/catch. `verifyAuth(req)` returns `{ ok, user, supabaseAdmin, supabaseUser }` or `{ ok: false, response }` — the latter is a ready-to-return 401. `jsonResponse(data, status)` and `errorResponse(message, status)` build CORS-aware responses.
+
+Apps keep their own prompts and parsing logic in their own `_shared/prompts.ts` (or similar) — the layer only provides the SDK plumbing. Typical edge function shape:
+
+```ts
+import { callClaude, parseJSON } from "../_shared/claude.ts";
+import { errorResponse, jsonResponse, serveEdge, verifyAuth } from "../_shared/edge.ts";
+import { MY_PROMPT } from "../_shared/prompts.ts";
+
+serveEdge(async (req) => {
+  const auth = await verifyAuth(req);
+  if (!auth.ok) return auth.response;
+  const { user, supabaseAdmin } = auth;
+
+  const { topic } = await req.json();
+  const result = await callClaude({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4000,
+    system: MY_PROMPT,
+    user: `Topic: ${topic}`,
+  });
+  if (result.truncated) throw new Error("response truncated");
+
+  const data = parseJSON(result.text);
+  // ... persist via supabaseAdmin ...
+  return jsonResponse({ ok: true });
+});
+```
+
 **Edge Functions over Nuxt API routes (`server/api/`)** for the typical Capacitor + Cloudflare stack:
 
 - **Capacitor mobile builds use `nuxt generate` (SSG)** — there's no Nuxt server in the iOS/Android bundle, so `server/api/` routes don't exist on device. Mobile has to call a remote endpoint either way.
