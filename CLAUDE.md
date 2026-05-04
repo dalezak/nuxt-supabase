@@ -12,7 +12,7 @@ A Nuxt 4 + Supabase starter with a model/collection layer, Pinia stores, and Ind
 
 Nuxt 4 uses `app/` as the source directory. Config files and non-app code stay at the root.
 
-```
+```text
 app/                 Nuxt source directory (srcDir)
   app.vue            Root component
   app.config.ts      App-level runtime config
@@ -293,8 +293,9 @@ Stores expose: `item`, `items`, `getItem`, `getItems`, `loadItem`, `loadItems`, 
 
 ## Naming
 
+- **Tables** — single word, lowercase, plural when possible (`courses`, `habits`, `pillars`, `friends`, `groups`). Reach for two words only when no single noun fits the concept; prefer renaming the concept first.
 - **Stores** — `kebab-case.js` named after the resource, exporting `useThingsStore` (e.g. `stores/courses.js` → `useCoursesStore`).
-- **Models** — `PascalCase.js`, singular for the model (`Course`), plural for the collection (`Courses`).
+- **Models** — `PascalCase.js`, singular for the model (`Course`), plural for the collection (`Courses`). Follows from the table name.
 - **Composables** — `useThing.js`, `export function useThing()` returning an object of functions/refs.
 - **Utils** — `kebab-case.js`, single default-export function. Auto-imported as camelCase (e.g. `gravatar-url.js` → `gravatarUrl()`).
 
@@ -311,3 +312,129 @@ Stores expose: `item`, `items`, `getItem`, `getItems`, `loadItem`, `loadItems`, 
 - `nuxt.config.ts`: SSR enabled, Pinia + Supabase modules, `runtimeConfig.public.url` from `APP_URL`
 - Supabase redirect is disabled (`redirect: false`); login redirect is `/login`
 - Environment variables: `APP_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SECRET_KEY`
+
+## Badges & awards
+
+Generic achievement primitive. The schema and models live here so consuming apps share one mechanism; each app populates its own badge set via a per-app seed migration.
+
+- **Tables** (created by layer migrations):
+  - `badges` — definitions: `(id, type, name, description, icon, created_at)`. `type` is the stable slug for the kind of badge (e.g. `'first_step'`, `'week_warrior'`). Public-readable.
+  - `awards` — earned instances: `(id, user_id, badge_id, earned_at)`. UNIQUE(user_id, badge_id) — a badge can only be earned once per user. Owner-only RLS.
+- **Models**: `Badge`, `Badges`, `Award`, `Awards` in `app/models/`. Import via relative path (classes aren't auto-imported).
+- **Award API**: `Badge.award(userId, type)` is idempotent (upsert). Returns `{ name, description, icon }` only when *just earned* (within 5s window) — null otherwise. Lets callers branch cleanly to celebrate first-time earns without re-toasting.
+- **List API**: `Badges.loadForUser(userId)` joins awards → badges, returns `Badge` instances with `earned_at` populated, ordered most-recent first.
+
+**`type` vs `slug`**: `badges.type` is intentionally `type`, not `slug`. Convention: `type` discriminates *kinds* of records (categorical); `slug` is a user-readable id used in URLs. Badges are categorical.
+
+**Per-app seed**: each app writes its own badge inserts in a follow-up migration in *its* `supabase/migrations/` directory. Layer migrations create the tables; app migrations populate them with the badges that make sense for the product.
+
+**Toast wrapper**: the matching `useBadges()` composable lives in `nuxt-ionic` (since toast is a UI concern). Use:
+
+```js
+const { awardBadge } = useBadges();
+if (count >= 7) await awardBadge(userId, 'week_warrior');
+```
+
+App-specific milestone-check functions (which know about the app's domain models) build on top of `awardBadge` — they stay in the consuming app.
+
+## Friends, groups, members, kudos, invites
+
+Generic social primitives. Schemas + base models + helper functions live here so consuming apps share one mechanism. Each app composes them with its own domain (e.g. friend-visible reflections, group-shared practices) via app-specific RLS policies.
+
+### `friends`
+
+Bidirectional friendship between two users with `status` (`'pending'` | `'accepted'`). UNIQUE(user_id, friend_id), CHECK(user_id ≠ friend_id).
+
+- **Model**: `Friend` / `Friends`. API: `sendRequest(fromUserId, toEmail)`, `accept(friendId)`, `remove(friendId)`, `between(userId, otherId)`, `loadForUser(userId)` (returns `{ friends, pending, requests }` with users joined), `loadFriendIds(userId)` (just the accepted friend ids).
+- **Helper function**: `is_friend(p_user_id)` — security-definer SQL function. Returns true if the current auth user is an accepted friend of `p_user_id`. Use in RLS policies on app tables to widen visibility for friends.
+- **Layer policies provided**: friends-can-view-awards (since `awards` is a layer table). Apps add their own `is_friend(user_id)` policies for app-specific tables (e.g. BestSelf adds friend visibility on `habits.pillar_id` for "presence" sharing).
+
+### `groups` + `members`
+
+Owner-created shared circle (`groups`) + user-belongs-to-group rows (`members`, with `role`).
+
+- **Model**: `Group` / `Groups` (cached locally — slowly-changing), `Member` / `Members`. API: `Member.invite(groupId, userId, role)`, `Member.findUserByEmail(email)`, `Member.loadMemberIdsForUser(userId)` (distinct fellow-member ids across the user's groups), `Members.loadForGroup(groupId)`, `Groups.loadForUser(userId)`.
+- **Helper functions**:
+  - `is_group_member(p_group_id)` — current user belongs to this group?
+  - `is_group_member_with(p_user_id)` — current user shares any group with this user?
+- **Layer policies provided**: groups visible to owner OR member; members visible to self OR group owner. Apps add group-visibility on their own tables (e.g. "shared practices visible to fellow group members") via the helper functions.
+
+### `kudos`
+
+Small acknowledgment one user gives another for a specific activity. Polymorphic via `(activity_type, activity_id)` so apps pick their own activity types (`'reflection'`, `'lesson'`, `'post'`, …).
+
+- **Model**: `Kudo` / `Kudos`. API: `Kudo.give(fromUserId, toUserId, activityType, activityId)` (idempotent upsert — UNIQUE on the four key columns), `Kudo.remove(...)`, `Kudo.loadForActivities(items)` (batch-load for activity feeds — items shaped like `{ type, activity_id }`).
+
+### `invites`
+
+Pending invitations to a group (`group_id` set) or a friendship (`group_id` null). When the invitee signs up with the matching email, a DB trigger auto-joins them to the group / auto-accepts the friendship and marks the invite accepted.
+
+- **Model**: `Invite` / `Invites`. API: `Invite.send(groupId, email, groupName, fromName, branding)`, `Invite.sendFriend(userId, email, fromName, branding)`, `Invite.resend(email, fromName, branding)`, `Invite.cancel(inviteId)`, `Invite.loadPendingFriendInvites(userId)`.
+- **Trigger**: `process_pending_invites()` fires on insert into `public.users` — auto-joins groups, auto-accepts friend invites, marks invites accepted.
+- **Layer Edge Function**: `invite-send` at `supabase/functions/invite-send/`. Validates auth + group ownership, manages the invite/member rows, optionally sends a branded email via Resend. **Apps pass branding parameters** (`app_name`, `app_url`, `from_email`) so the email reflects each app's identity. Set `RESEND_API_KEY` per environment for actual email delivery; the function is best-effort on email and always succeeds at storing the invite (the trigger handles auto-join when the user signs up).
+
+### `streaks`
+
+Per-user activity streak with current/longest/lifetime tracking and one-day grace. One row per user (UNIQUE on `user_id`). Each app calls `useStreak().updateStreak(userId)` at its own activity moments — the layer maintains the math.
+
+- **Columns**: `current_streak`, `longest_streak`, `lifetime_days`, `last_activity_at`, `grace_used`. `lifetime_days` is the "days of practice" metric — total distinct calendar days with activity, never resets, always grows. Lets apps frame progress positively (cumulative pride) alongside the optional streak (consistency).
+- **Composable**: `useStreak()` exposes `updateStreak(userId)` and `loadStreak(userId)`.
+- **Update logic** (inside `updateStreak`): same-day = no-op; 1-day gap = increment + reset grace; 2-day gap with grace available = increment + spend grace; larger gap = reset to 1. `lifetime_days` increments on any new calendar day.
+- **Returns** from `updateStreak`: `{ streak, gap, wasReset, isNew }`. `gap` is days between previous `last_activity_at` and now (0 if same day, null if first activity). `wasReset` is true when the streak dropped to 1. Apps use these for celebration logic (e.g. comeback badges fire when `wasReset || gap >= 3`).
+- **Layer policies**: streak rows are owner-only + friend-readable (uses `is_friend()` from the friends migration).
+- **Each app defines what activity counts**: BestSelf calls `updateStreak` after a reflection saves; any-learn calls it after a lesson completes. The layer is agnostic.
+
+### `likes`
+
+Polymorphic "user appreciates X" via `(item_type, item_id)`. Each app picks its own item types (`'reflection'`, `'lesson'`, `'post'`).
+
+- **Columns**: `user_id`, `item_type`, `item_id`, `content` (JSONB, optional — for likes carrying data like highlighted text or emoji choice).
+- **No UNIQUE on (user_id, item_type, item_id)** — supports both like-once semantics (apps add their own UNIQUE) and multi-like semantics (e.g. multiple highlights per item). Apps choose.
+- **Model**: `Like` / `Likes`. API: `Like.insert(userId, itemType, itemId, content)`, `Like.remove(userId, itemType, itemId)`, `Like.removeByContent(...)` (delete distinguished by JSONB content match), `Likes.loadForUserByType(userId, itemType, ...)`.
+- **RLS**: owner-only by default. Apps add friend / group visibility via additional policies if needed.
+
+### Push notifications (`subscriptions` + `useNotifications` + `notify-send` Edge Function)
+
+Web push setup. One row per (user, browser/device) endpoint.
+
+- **`subscriptions` table**: `(user_id, endpoint, p256dh, auth)` with UNIQUE(user_id, endpoint). Owner-only RLS.
+- **`Subscription` model**: `Subscription.upsert(userId, endpoint, p256dh, auth)` (idempotent), `Subscription.deleteForUser(userId, endpoint)`.
+- **`useNotifications()` composable**: client-side subscription management.
+  - `isSupported` (computed) — does the browser support web push?
+  - `registerServiceWorker(path = '/sw.js')` — register the SW (apps provide the file)
+  - `subscribe(userId)` — request permission, register PushManager, store endpoint via `Subscription.upsert`
+  - `unsubscribe(userId)` — remove from PushManager + delete row
+  - Reads `runtimeConfig.public.vapidPublicKey` for the application server key.
+- **`notify-send` Edge Function** (`supabase/functions/notify-send/`): server-side dispatcher. Auth: Bearer SERVICE_ROLE_KEY. Body: `{ user_ids[], title, body, url? }`. Sends via web-push to all matching subscriptions, returns `{ sent, expired }`. Auto-deletes endpoints that the push service marks as 410 Gone.
+- **Apps build their own scheduled jobs** (cron via `pg_cron` or external scheduler) that select WHO to notify based on app criteria, then invoke `notify-send` with the user_ids + payload. Layer doesn't decide what triggers notifications — it just dispatches.
+- **Mobile (Capacitor) push** — separate concern. The `useNotifications()` composable handles web push only; native APNs/FCM via Capacitor Push Notifications plugin comes later as a wrapped extension (see nuxt-ionic Capacitor wrapper convention).
+- **Required env vars**: `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Edge Function); `runtimeConfig.public.vapidPublicKey` (client).
+
+### Activity formatting (`useActivityFormat`)
+
+Generic dispatch for activity-feed items. Apps declare their own activity-type map; the composable returns icon/color/description formatters that dispatch on `item.type`.
+
+- **`useActivityFormat(typesMap)`**: returns `{ activityIcon, activityColor, activityDescription }`. The `typesMap` shape: `{ [typeKey]: { icon, color, describe(item) } }`. Unknown types fall back to null icon, `'medium'` color, empty description.
+- Apps with activity feeds (friends' actions, group activity) use this to keep formatting consistent across feeds — same dispatch shape, app-specific types.
+
+### Date utilities (`dayOfYear`, `formatRelative`)
+
+- **`dayOfYear(date)`**: returns 1..366 (auto-imported util). Used to seed deterministic daily picks (today's principle, today's habit, etc.).
+- **`formatRelative(dateStr)`**: returns short relative string (`'just now'`, `'5m ago'`, `'2h ago'`, `'3d ago'`). Returns `''` for falsy input — safe to use directly in templates.
+
+### Where each piece lives
+
+- **Schema + models + DB helper functions**: this layer (`nuxt-supabase`)
+- **Composables** (`useStreak`, etc., pure data): this layer (`nuxt-supabase/app/composables/`)
+- **Edge Function `invite-send`**: this layer (`nuxt-supabase/supabase/functions/invite-send/`)
+- **App-specific RLS** that grants friend / group visibility on app tables: each consuming app's own migrations (use the `is_friend`, `is_group_member`, `is_group_member_with` functions)
+- **App-specific composables** (e.g. friends activity feed wrapping `loadFriendIds` + app-domain queries): each consuming app
+- **Each app calls `updateStreak(userId)`** at its own definition of "activity" — the layer doesn't know what triggers it
+
+## Migration workflow
+
+**Pre-production (local development): edit migrations in place.** When iterating on schema during local dev, modify the existing migration file rather than stacking incremental `alter` migrations. Reset the local database (`supabase db reset`) to re-apply from scratch. This keeps the migration history clean while the schema is still in flux and avoids a fossil record of every intermediate shape.
+
+**After deploying to production Supabase: incremental migrations only.** Once a migration has been applied to a hosted database, treat it as immutable. Subsequent schema changes go in new timestamped migration files (`supabase migration new <name>`). Never edit a migration that has run in production — the hosted DB tracks applied migrations by checksum, and a hash mismatch will block future deploys (or worse, leave the schema in an inconsistent state).
+
+The cutover is a one-way door per app: the moment the first deploy touches production, the in-place editing era ends.
