@@ -163,3 +163,15 @@ as permissive
 for select
 to authenticated
 using (auth.uid() = owner_id or is_group_member(id));
+
+-- Layer-table widening: group members witness each other. Mirrors what the
+-- friends migration did with `is_friend`, but for group co-membership.
+-- Permissive policies are OR'd, so this layers on top of the existing
+-- owner / friends policies without disturbing them.
+
+create policy "Group members can view awards"
+on "public"."awards"
+as permissive
+for select
+to authenticated
+using (is_group_member_with(user_id));

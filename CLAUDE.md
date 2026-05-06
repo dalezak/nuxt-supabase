@@ -427,12 +427,20 @@ Polymorphic "user appreciates X" via `(item_type, item_id)`. Each app picks its 
 - **Model**: `Like` / `Likes`. API: `Like.insert(userId, itemType, itemId, content)`, `Like.remove(userId, itemType, itemId)`, `Like.removeByContent(...)` (delete distinguished by JSONB content match), `Likes.loadForUserByType(userId, itemType, ...)`.
 - **RLS**: owner-only by default. Apps add friend / group visibility via additional policies if needed.
 
-### Push notifications (`subscriptions` + `useNotifications` + `notify-send` Edge Function)
+### Push notifications (`subscriptions` + `notification_preferences` + `useNotifications` + `notify-send` Edge Function)
 
-Web push setup. One row per (user, browser/device) endpoint.
+Web push setup. Two tables, two layers of state:
+
+- `subscriptions` is **per-device** — one row per (user, browser/PWA endpoint). A user with both a desktop browser and an installed PWA has two rows.
+- `notification_preferences` is **per-user** — opt-in flag, timezone, quiet hours, and a `prefs` jsonb for app-specific extensions (e.g. `{ morningPrompts: true, eveningPrompts: false }`). One row per user.
+
+Components:
 
 - **`subscriptions` table**: `(user_id, endpoint, p256dh, auth)` with UNIQUE(user_id, endpoint). Owner-only RLS.
+- **`notification_preferences` table**: `(user_id PK, enabled, timezone, quiet_start, quiet_end, prefs jsonb)`. Owner-only RLS. SQL helper `is_quiet_hour(user_id)` returns whether the current moment falls inside the user's local quiet window (handles timezone + midnight-crossing ranges); apps use it in cron-job recipient filters: `where not is_quiet_hour(user_id)`.
 - **`Subscription` model**: `Subscription.upsert(userId, endpoint, p256dh, auth)` (idempotent), `Subscription.deleteForUser(userId, endpoint)`.
+- **`NotificationPreference` model**: `NotificationPreference.loadForUser(userId)`, `NotificationPreference.upsert(userId, fields)`.
+- **`useNotificationPreferencesStore`**: standard `createSupaStore` wrapper. Use `loadForUser(userId)` / `upsertForUser(userId, fields)` — `loadItem({id})` doesn't apply since the PK is `user_id`.
 - **`useNotifications()` composable**: client-side subscription management.
   - `isSupported` (computed) — does the browser support web push?
   - `registerServiceWorker(path = '/sw.js')` — register the SW (apps provide the file)
@@ -440,9 +448,16 @@ Web push setup. One row per (user, browser/device) endpoint.
   - `unsubscribe(userId)` — remove from PushManager + delete row
   - Reads `runtimeConfig.public.vapidPublicKey` for the application server key.
 - **`notify-send` Edge Function** (`supabase/functions/notify-send/`): server-side dispatcher. Auth: Bearer SERVICE_ROLE_KEY. Body: `{ user_ids[], title, body, url? }`. Sends via web-push to all matching subscriptions, returns `{ sent, expired }`. Auto-deletes endpoints that the push service marks as 410 Gone.
-- **Apps build their own scheduled jobs** (cron via `pg_cron` or external scheduler) that select WHO to notify based on app criteria, then invoke `notify-send` with the user_ids + payload. Layer doesn't decide what triggers notifications — it just dispatches.
-- **Mobile (Capacitor) push** — separate concern. The `useNotifications()` composable handles web push only; native APNs/FCM via Capacitor Push Notifications plugin comes later as a wrapped extension (see nuxt-ionic Capacitor wrapper convention).
-- **Required env vars**: `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Edge Function); `runtimeConfig.public.vapidPublicKey` (client).
+
+Scheduling pattern (apps own this):
+
+1. Enable the `pg_cron` extension in your Supabase project (one click in the dashboard).
+2. Write an app-specific Edge Function that picks recipients (joining your domain tables, filtering by `notification_preferences.enabled = true and not is_quiet_hour(user_id)`), builds your app's copy, and POSTs to `notify-send`.
+3. Schedule the function with `cron.schedule(...)` SQL — typically every 15–30 minutes, since timezone math means "morning" lands at different UTC times for different users.
+
+Mobile (Capacitor) push is a separate concern — the `useNotifications()` composable handles web push only. Native APNs/FCM via Capacitor Push Notifications plugin layers on top via the `nuxt-ionic` Capacitor wrapper convention.
+
+**Required env vars**: `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Edge Function); `runtimeConfig.public.vapidPublicKey` (client).
 
 ### Activity formatting (`useActivityFormat`)
 

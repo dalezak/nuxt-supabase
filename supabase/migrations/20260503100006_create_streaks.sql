@@ -65,3 +65,13 @@ as permissive
 for select
 to authenticated
 using (auth.uid() = user_id or is_friend(user_id));
+
+-- Group members witness each other. Same widening pattern as awards in
+-- the groups migration. Layered as a separate permissive policy (OR with
+-- the friends policy above) to keep the two visibility paths legible.
+create policy "Streaks viewable by group members"
+on "public"."streaks"
+as permissive
+for select
+to authenticated
+using (is_group_member_with(user_id));

@@ -69,6 +69,20 @@ export default class Invite extends SupaModel {
     });
   }
 
+  // Pending group invites for a given group. Visible to the group owner via
+  // the "Invites manageable by group owner" RLS policy.
+  static async loadPendingForGroup(groupId) {
+    return SupaModels.loadModels(Invites, Invite, 'invites', {
+      select: 'id, email, created_at',
+      where: [
+        ['group_id', 'eq', groupId],
+        ['status', 'eq', 'pending'],
+      ],
+      order: 'created_at:desc',
+      limit: 1000,
+    });
+  }
+
   static async cancel(inviteId) {
     await SupaModels.deleteModels('invites', [['id', 'eq', inviteId]]);
   }

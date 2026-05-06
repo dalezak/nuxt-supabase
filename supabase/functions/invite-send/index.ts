@@ -13,7 +13,7 @@
 //     fromName?:   string,         // who's inviting
 //     app_name?:   string,         // for email branding (e.g. "BestSelf")
 //     app_url?:    string,         // for the CTA link in the email
-//     from_email?: string,         // sending address (e.g. "hello@bestself.app")
+//     from_email?: string,         // sending address
 //     send_email?: boolean,        // default true; set false to skip email send
 //   }
 //
@@ -25,29 +25,12 @@
 // fails, the invite row is still stored and the trigger will pick the user
 // up when they sign up.
 
-import { createClient } from "npm:@supabase/supabase-js";
+import { errorResponse, jsonResponse, serveEdge, verifyAuth } from "../_shared/edge.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
-
-  // Verify caller is authenticated
-  const authHeader = req.headers.get("Authorization");
-  const { data: { user }, error: authError } = await supabase.auth.getUser(
-    authHeader?.replace("Bearer ", "") ?? ""
-  );
-  if (authError || !user) {
-    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
-  }
+serveEdge(async (req) => {
+  const auth = await verifyAuth(req);
+  if (!auth.ok) return auth.response;
+  const { user, supabaseAdmin } = auth;
 
   const body = await req.json();
   const {
@@ -61,9 +44,7 @@ Deno.serve(async (req: Request) => {
     send_email = true,
   } = body;
 
-  if (!email) {
-    return new Response("Missing email", { status: 400, headers: corsHeaders });
-  }
+  if (!email) return errorResponse("Missing email", 400);
 
   const normalizedEmail = (email as string).trim().toLowerCase();
   const resendKey = Deno.env.get("RESEND_API_KEY");
@@ -82,36 +63,34 @@ Deno.serve(async (req: Request) => {
         html: friendInviteHtml({ fromName, appName: app_name, appUrl: app_url, email: normalizedEmail }),
       });
     }
-    return json({ invited: true });
+    return jsonResponse({ invited: true });
   }
 
   // ── Group invite ────────────────────────────────────────────────────────
   // Verify caller owns the group
-  const { data: group } = await supabase
+  const { data: group } = await supabaseAdmin
     .from("groups")
     .select("id, owner_id")
     .eq("id", groupId)
     .eq("owner_id", user.id)
     .maybeSingle();
-  if (!group) {
-    return new Response("Forbidden", { status: 403, headers: corsHeaders });
-  }
+  if (!group) return errorResponse("Forbidden", 403);
 
   // If user already exists, add them directly as a member
-  const { data: existingUser } = await supabase
+  const { data: existingUser } = await supabaseAdmin
     .from("users")
     .select("id")
     .eq("email", normalizedEmail)
     .maybeSingle();
   if (existingUser) {
-    await supabase
+    await supabaseAdmin
       .from("members")
       .insert({ group_id: groupId, user_id: existingUser.id, role: "member" });
-    return json({ added: true });
+    return jsonResponse({ added: true });
   }
 
   // Otherwise store the pending invite (upsert)
-  await supabase
+  await supabaseAdmin
     .from("invites")
     .upsert(
       { group_id: groupId, email: normalizedEmail, invited_by: user.id },
@@ -128,16 +107,10 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  return json({ invited: true });
+  return jsonResponse({ invited: true });
 });
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function json(payload: unknown) {
-  return new Response(JSON.stringify(payload), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+// ── Email helpers ──────────────────────────────────────────────────────────
 
 async function sendEmail(opts: { resendKey: string; from: string; to: string; subject: string; html: string }) {
   try {

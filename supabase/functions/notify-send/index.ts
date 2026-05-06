@@ -5,7 +5,8 @@
 // invoke this function with a list of user_ids + payload.
 //
 // Auth: Bearer SUPABASE_SERVICE_ROLE_KEY (only callable from other Edge
-// Functions or pg_cron — never from clients).
+// Functions or pg_cron — never from clients). This bypasses the standard
+// `verifyAuth` flow because notify-send is server-to-server only.
 //
 // Request body:
 //   {
@@ -15,25 +16,25 @@
 //     url?:     string,     // optional click-through path (default '/')
 //   }
 //
-// Response:
-//   { sent: number, expired: number }
+// Response: { sent: number, expired: number }
 //
 // Expired subscriptions (HTTP 410 from the push service) are auto-deleted
 // so the table stays clean.
 
 import webPush from "npm:web-push";
 import { createClient } from "npm:@supabase/supabase-js";
+import { errorResponse, jsonResponse, serveEdge } from "../_shared/edge.ts";
 
-Deno.serve(async (req: Request) => {
+serveEdge(async (req) => {
+  // Service-role-only: invoked server-to-server, never from a user client,
+  // so we don't use verifyAuth here.
   const auth = req.headers.get("Authorization");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  if (auth !== `Bearer ${serviceKey}`) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  if (auth !== `Bearer ${serviceKey}`) return errorResponse("Unauthorized", 401);
 
   const { user_ids, title, body, url } = await req.json();
   if (!Array.isArray(user_ids) || user_ids.length === 0 || !title || !body) {
-    return new Response("Missing or invalid payload (need user_ids[], title, body)", { status: 400 });
+    return errorResponse("Missing or invalid payload (need user_ids[], title, body)", 400);
   }
 
   webPush.setVapidDetails(
@@ -63,7 +64,6 @@ Deno.serve(async (req: Request) => {
       sent++;
     } catch (err: any) {
       if (err.statusCode === 410) {
-        // Push service says this endpoint is permanently gone — clean up.
         expired.push(sub.id);
       }
     }
@@ -73,7 +73,5 @@ Deno.serve(async (req: Request) => {
     await supabase.from("subscriptions").delete().in("id", expired);
   }
 
-  return new Response(JSON.stringify({ sent, expired: expired.length }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  return jsonResponse({ sent, expired: expired.length });
 });
