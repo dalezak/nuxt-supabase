@@ -8,9 +8,9 @@ This layer is being kept lean and OSS — core data-model primitives only (`Supa
 
 See [README.md](./README.md) for the full inventory. Quick state:
 
-- **Available**: `nuxt-ionic` (OSS), `nuxt-courses` (private, course/lesson/quiz), `nuxt-principles` (private, Stoic/Buddhist principle library), `nuxt-notifications` (private, push infrastructure), `nuxt-plans` (private, billing — RevenueCat + plan gating), `nuxt-friends` (private, social graph — friends/groups/invites/kudos + is_friend helpers)
-- **In progress** (private, being lifted out of this repo, one at a time): `nuxt-badges`
-- **Stays here for now**: `streaks`, `likes`, `ai_calls`
+- **Available**: `nuxt-ionic` (OSS), `nuxt-courses` (private, course/lesson/quiz), `nuxt-principles` (private, Stoic/Buddhist principle library), `nuxt-notifications` (private, push infrastructure), `nuxt-plans` (private, billing), `nuxt-friends` (private, social graph), `nuxt-badges` (private, achievement primitives)
+- **All planned splits done.** This layer now holds only the lean OSS core: `users` / `streaks` / `likes` / `ai_calls` + base classes (`SupaModel`, `SupaModels`, `RestModel`, `RestModels`, `GraphModel`, `GraphModels`) + `useStorage` + `createSupaStore` + `useProfile` + Edge Function `_shared/`.
+- **Stays here**: `users` (auth/profile), `streaks`, `likes`, `ai_calls` — these are the lean core
 
 When working in a consuming app, check the README inventory before writing new infrastructure — it may already exist as a layer.
 
@@ -361,29 +361,11 @@ Stores expose: `item`, `items`, `getItem`, `getItems`, `loadItem`, `loadItems`, 
 - Supabase redirect is disabled (`redirect: false`); login redirect is `/login`
 - Environment variables: `APP_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SECRET_KEY`
 
-## Badges & awards
+## Badges & awards — moved to `nuxt-badges`
 
-Generic achievement primitive. The schema and models live here so consuming apps share one mechanism; each app populates its own badge set via a per-app seed migration.
+The `badges` + `awards` tables, `Badge` / `Badges` / `Award` / `Awards` models, the idempotent `Badge.award(userId, type)` API, and `useBadgesStore` (with `awardBadge` toast wrapper) all live in [`nuxt-badges`](../nuxt-badges/CLAUDE.md). Apps that need achievement primitives extend that layer.
 
-- **Tables** (created by layer migrations):
-  - `badges` — definitions: `(id, type, name, description, icon, created_at)`. `type` is the stable slug for the kind of badge (e.g. `'first_step'`, `'week_warrior'`). Public-readable.
-  - `awards` — earned instances: `(id, user_id, badge_id, earned_at)`. UNIQUE(user_id, badge_id) — a badge can only be earned once per user. Owner-only RLS.
-- **Models**: `Badge`, `Badges`, `Award`, `Awards` in `app/models/`. Import via relative path (classes aren't auto-imported).
-- **Award API**: `Badge.award(userId, type)` is idempotent (upsert). Returns `{ name, description, icon }` only when *just earned* (within 5s window) — null otherwise. Lets callers branch cleanly to celebrate first-time earns without re-toasting.
-- **List API**: `Badges.loadForUser(userId)` joins awards → badges, returns `Badge` instances with `earned_at` populated, ordered most-recent first.
-
-**`type` vs `slug`**: `badges.type` is intentionally `type`, not `slug`. Convention: `type` discriminates *kinds* of records (categorical); `slug` is a user-readable id used in URLs. Badges are categorical.
-
-**Per-app seed**: each app writes its own badge inserts in a follow-up migration in *its* `supabase/migrations/` directory. Layer migrations create the tables; app migrations populate them with the badges that make sense for the product.
-
-**Toast wrapper**: the matching `useBadges()` composable lives in `nuxt-ionic` (since toast is a UI concern). Use:
-
-```js
-const { awardBadge } = useBadges();
-if (count >= 7) await awardBadge(userId, 'week_warrior');
-```
-
-App-specific milestone-check functions (which know about the app's domain models) build on top of `awardBadge` — they stay in the consuming app.
+When both `nuxt-badges` and `nuxt-friends` are included, awards become viewable by friends + group co-members via `nuxt-friends`'s `extend_awards_friend_visibility.sql`.
 
 ## Friends, groups, members, kudos, invites
 
