@@ -58,20 +58,6 @@ to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
--- Friends-can-view policy mirrors what we have on awards (since friends.is_friend exists).
-create policy "Streaks viewable by friends"
-on "public"."streaks"
-as permissive
-for select
-to authenticated
-using (auth.uid() = user_id or is_friend(user_id));
-
--- Group members witness each other. Same widening pattern as awards in
--- the groups migration. Layered as a separate permissive policy (OR with
--- the friends policy above) to keep the two visibility paths legible.
-create policy "Streaks viewable by group members"
-on "public"."streaks"
-as permissive
-for select
-to authenticated
-using (is_group_member_with(user_id));
+-- Friend / group visibility policies (using is_friend / is_group_member_with
+-- helpers) are added by `nuxt-friends` if the consuming app extends that
+-- layer. Apps that don't include `nuxt-friends` get owner-only streaks.

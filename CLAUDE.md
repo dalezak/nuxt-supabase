@@ -8,8 +8,8 @@ This layer is being kept lean and OSS — core data-model primitives only (`Supa
 
 See [README.md](./README.md) for the full inventory. Quick state:
 
-- **Available**: `nuxt-ionic` (OSS), `nuxt-courses` (private, course/lesson/quiz), `nuxt-principles` (private, Stoic/Buddhist principle library), `nuxt-notifications` (private, push infrastructure), `nuxt-plans` (private, billing — RevenueCat + plan gating)
-- **In progress** (private, being lifted out of this repo, one at a time): `nuxt-friends`, `nuxt-badges`
+- **Available**: `nuxt-ionic` (OSS), `nuxt-courses` (private, course/lesson/quiz), `nuxt-principles` (private, Stoic/Buddhist principle library), `nuxt-notifications` (private, push infrastructure), `nuxt-plans` (private, billing — RevenueCat + plan gating), `nuxt-friends` (private, social graph — friends/groups/invites/kudos + is_friend helpers)
+- **In progress** (private, being lifted out of this repo, one at a time): `nuxt-badges`
 - **Stays here for now**: `streaks`, `likes`, `ai_calls`
 
 When working in a consuming app, check the README inventory before writing new infrastructure — it may already exist as a layer.
@@ -389,37 +389,11 @@ App-specific milestone-check functions (which know about the app's domain models
 
 Generic social primitives. Schemas + base models + helper functions live here so consuming apps share one mechanism. Each app composes them with its own domain (e.g. friend-visible reflections, group-shared practices) via app-specific RLS policies.
 
-### `friends`
+### Friends / groups / invites / kudos — moved to `nuxt-friends`
 
-Bidirectional friendship between two users with `status` (`'pending'` | `'accepted'`). UNIQUE(user_id, friend_id), CHECK(user_id ≠ friend_id).
+The social-graph primitives (friends, groups, members, invites, kudos) plus the `is_friend` / `is_group_member` / `is_group_member_with` SQL helpers, the `invite-send` Edge Function, and all related models + stores live in [`nuxt-friends`](../nuxt-friends/CLAUDE.md). Apps that need a social layer extend that layer.
 
-- **Model**: `Friend` / `Friends`. API: `sendRequest(fromUserId, toEmail)`, `accept(friendId)`, `remove(friendId)`, `between(userId, otherId)`, `loadForUser(userId)` (returns `{ friends, pending, requests }` with users joined), `loadFriendIds(userId)` (just the accepted friend ids).
-- **Helper function**: `is_friend(p_user_id)` — security-definer SQL function. Returns true if the current auth user is an accepted friend of `p_user_id`. Use in RLS policies on app tables to widen visibility for friends.
-- **Layer policies provided**: friends-can-view-awards (since `awards` is a layer table). Apps add their own `is_friend(user_id)` policies for app-specific tables (e.g. BestSelf adds friend visibility on `habits.pillar_id` for "presence" sharing).
-
-### `groups` + `members`
-
-Owner-created shared circle (`groups`) + user-belongs-to-group rows (`members`, with `role`).
-
-- **Model**: `Group` / `Groups` (cached locally — slowly-changing), `Member` / `Members`. API: `Member.invite(groupId, userId, role)`, `Member.findUserByEmail(email)`, `Member.loadMemberIdsForUser(userId)` (distinct fellow-member ids across the user's groups), `Members.loadForGroup(groupId)`, `Groups.loadForUser(userId)`.
-- **Helper functions**:
-  - `is_group_member(p_group_id)` — current user belongs to this group?
-  - `is_group_member_with(p_user_id)` — current user shares any group with this user?
-- **Layer policies provided**: groups visible to owner OR member; members visible to self OR group owner. Apps add group-visibility on their own tables (e.g. "shared practices visible to fellow group members") via the helper functions.
-
-### `kudos`
-
-Small acknowledgment one user gives another for a specific activity. Polymorphic via `(activity_type, activity_id)` so apps pick their own activity types (`'reflection'`, `'lesson'`, `'post'`, …).
-
-- **Model**: `Kudo` / `Kudos`. API: `Kudo.give(fromUserId, toUserId, activityType, activityId)` (idempotent upsert — UNIQUE on the four key columns), `Kudo.remove(...)`, `Kudo.loadForActivities(items)` (batch-load for activity feeds — items shaped like `{ type, activity_id }`).
-
-### `invites`
-
-Pending invitations to a group (`group_id` set) or a friendship (`group_id` null). When the invitee signs up with the matching email, a DB trigger auto-joins them to the group / auto-accepts the friendship and marks the invite accepted.
-
-- **Model**: `Invite` / `Invites`. API: `Invite.send(groupId, email, groupName, fromName, branding)`, `Invite.sendFriend(userId, email, fromName, branding)`, `Invite.resend(email, fromName, branding)`, `Invite.cancel(inviteId)`, `Invite.loadPendingFriendInvites(userId)`.
-- **Trigger**: `process_pending_invites()` fires on insert into `public.users` — auto-joins groups, auto-accepts friend invites, marks invites accepted.
-- **Layer Edge Function**: `invite-send` at `supabase/functions/invite-send/`. Validates auth + group ownership, manages the invite/member rows, optionally sends a branded email via Resend. **Apps pass branding parameters** (`app_name`, `app_url`, `from_email`) so the email reflects each app's identity. Set `RESEND_API_KEY` per environment for actual email delivery; the function is best-effort on email and always succeeds at storing the invite (the trigger handles auto-join when the user signs up).
+This layer's `streaks` table strips its friend / group SELECT policies to owner-only; `nuxt-friends` ships an extension migration that re-adds the friend / group visibility when both layers are included.
 
 ### `streaks`
 
@@ -429,7 +403,7 @@ Per-user activity streak with current/longest/lifetime tracking and one-day grac
 - **Composable**: `useStreak()` exposes `updateStreak(userId)` and `loadStreak(userId)`.
 - **Update logic** (inside `updateStreak`): same-day = no-op; 1-day gap = increment + reset grace; 2-day gap with grace available = increment + spend grace; larger gap = reset to 1. `lifetime_days` increments on any new calendar day.
 - **Returns** from `updateStreak`: `{ streak, gap, wasReset, isNew }`. `gap` is days between previous `last_activity_at` and now (0 if same day, null if first activity). `wasReset` is true when the streak dropped to 1. Apps use these for celebration logic (e.g. comeback badges fire when `wasReset || gap >= 3`).
-- **Layer policies**: streak rows are owner-only + friend-readable (uses `is_friend()` from the friends migration).
+- **Layer policies**: streak rows are owner-only by default. Apps that include `nuxt-friends` get friend + group SELECT visibility added automatically via that layer's extension migration.
 - **Each app defines what activity counts**: BestSelf calls `updateStreak` after a reflection saves; any-learn calls it after a lesson completes. The layer is agnostic.
 
 ### `likes`
@@ -465,7 +439,7 @@ Generic dispatch for activity-feed items. Apps declare their own activity-type m
 
 - **Schema + models + DB helper functions**: this layer (`nuxt-supabase`)
 - **Composables** (`useStreak`, etc., pure data): this layer (`nuxt-supabase/app/composables/`)
-- **`invite-send` Edge Function**: this layer. Apps `cp` it into their own `supabase/functions/` via `npm run supabase` so it deploys with the app. (`notify-send` lives in `nuxt-notifications`; `revenuecat` lives in `nuxt-plans`.)
+- **Edge Functions** are split across sub-layers: `invite-send` lives in `nuxt-friends`, `notify-send` in `nuxt-notifications`, `revenuecat` in `nuxt-plans`. Apps `cp` the ones they use into their own `supabase/functions/` via `npm run supabase`.
 - **App-specific RLS** that grants friend / group visibility on app tables: each consuming app's own migrations (use the `is_friend`, `is_group_member`, `is_group_member_with` functions)
 - **App-specific composables** (e.g. friends activity feed wrapping `loadFriendIds` + app-domain queries): each consuming app
 - **Each app calls `updateStreak(userId)`** at its own definition of "activity" — the layer doesn't know what triggers it
