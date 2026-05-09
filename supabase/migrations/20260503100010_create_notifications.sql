@@ -1,15 +1,19 @@
--- Notification preferences: per-user opt-in + timezone + quiet-hours +
--- app-specific extensions (jsonb). One row per user.
+-- Notifications: per-user notification settings — opt-in flag, timezone,
+-- quiet-hours window, and an app-specific extension jsonb. One row per user.
+--
+-- Despite the name, this table stores **settings**, not sent-notification
+-- records. The name is short for "notification settings"; consuming apps
+-- treat it that way.
 --
 -- Kept separate from `subscriptions` because subscriptions are per-device
--- (a user may have multiple browser/PWA endpoints) while preferences are
+-- (a user may have multiple browser/PWA endpoints) while these settings are
 -- per-user (cadence, quiet hours, opt-in apply across devices).
 --
 -- Apps store their own per-prompt-type opt-ins in the `prefs` jsonb column
 -- — e.g. `{ "morningPrompts": true, "eveningPrompts": false }` — so the
 -- table doesn't need an alter for every new prompt type.
 
-create table "public"."notification_preferences" (
+create table "public"."notifications" (
     "user_id" uuid not null,
     "enabled" boolean not null default false,
     "timezone" text,                -- IANA, e.g. 'America/Toronto'
@@ -20,44 +24,44 @@ create table "public"."notification_preferences" (
     "updated_at" timestamp without time zone default now()
 );
 
-create unique index notification_preferences_pkey on public.notification_preferences using btree (user_id);
+create unique index notifications_pkey on public.notifications using btree (user_id);
 
-alter table "public"."notification_preferences" add constraint "notification_preferences_pkey" primary key using index "notification_preferences_pkey";
-alter table "public"."notification_preferences" add constraint "notification_preferences_user_id_fkey" foreign key (user_id) references auth.users(id) on delete cascade;
+alter table "public"."notifications" add constraint "notifications_pkey" primary key using index "notifications_pkey";
+alter table "public"."notifications" add constraint "notifications_user_id_fkey" foreign key (user_id) references auth.users(id) on delete cascade;
 
-alter table "public"."notification_preferences" enable row level security;
+alter table "public"."notifications" enable row level security;
 
-create policy "Notification preferences selectable by owner"
-on "public"."notification_preferences"
+create policy "Notifications selectable by owner"
+on "public"."notifications"
 as permissive
 for select
 to authenticated
 using (auth.uid() = user_id);
 
-create policy "Notification preferences insertable by owner"
-on "public"."notification_preferences"
+create policy "Notifications insertable by owner"
+on "public"."notifications"
 as permissive
 for insert
 to authenticated
 with check (auth.uid() = user_id);
 
-create policy "Notification preferences updatable by owner"
-on "public"."notification_preferences"
+create policy "Notifications updatable by owner"
+on "public"."notifications"
 as permissive
 for update
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
-create policy "Notification preferences deletable by owner"
-on "public"."notification_preferences"
+create policy "Notifications deletable by owner"
+on "public"."notifications"
 as permissive
 for delete
 to authenticated
 using (auth.uid() = user_id);
 
 -- Helper: is the given user currently in their configured quiet hours?
--- Returns false if the user has no preferences row, or no quiet window set.
+-- Returns false if the user has no settings row, or no quiet window set.
 -- Handles ranges that cross midnight (quiet_start > quiet_end), e.g. 22:00–07:00.
 -- Apps use this in cron-job recipient filters: `where not is_quiet_hour(user_id)`.
 --
@@ -78,7 +82,7 @@ declare
 begin
   select timezone, quiet_start, quiet_end
     into p_tz, p_start, p_end
-  from public.notification_preferences
+  from public.notifications
   where user_id = p_user_id;
 
   if p_start is null or p_end is null then
