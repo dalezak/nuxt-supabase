@@ -22,15 +22,14 @@
 // so the table stays clean.
 
 import webPush from "npm:web-push";
-import { createClient } from "npm:@supabase/supabase-js";
-import { errorResponse, jsonResponse, serveEdge } from "../_shared/edge.ts";
+import { errorResponse, jsonResponse, serveEdge, verifyServiceRole } from "../_shared/edge.ts";
 
 serveEdge(async (req) => {
-  // Service-role-only: invoked server-to-server, never from a user client,
-  // so we don't use verifyAuth here.
-  const auth = req.headers.get("Authorization");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  if (auth !== `Bearer ${serviceKey}`) return errorResponse("Unauthorized", 401);
+  // Service-role-only: invoked server-to-server (cron jobs, app Edge Functions),
+  // never from a user client.
+  const auth = verifyServiceRole(req);
+  if (!auth.ok) return auth.response;
+  const { supabaseAdmin } = auth;
 
   const { user_ids, title, body, url } = await req.json();
   if (!Array.isArray(user_ids) || user_ids.length === 0 || !title || !body) {
@@ -43,9 +42,7 @@ serveEdge(async (req) => {
     Deno.env.get("VAPID_PRIVATE_KEY")!,
   );
 
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
-
-  const { data: subs } = await supabase
+  const { data: subs } = await supabaseAdmin
     .from("subscriptions")
     .select("*")
     .in("user_id", user_ids);
@@ -70,7 +67,7 @@ serveEdge(async (req) => {
   }
 
   if (expired.length) {
-    await supabase.from("subscriptions").delete().in("id", expired);
+    await supabaseAdmin.from("subscriptions").delete().in("id", expired);
   }
 
   return jsonResponse({ sent, expired: expired.length });

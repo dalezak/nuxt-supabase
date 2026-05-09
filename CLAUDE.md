@@ -459,6 +459,16 @@ Mobile (Capacitor) push is a separate concern — the `useNotifications()` compo
 
 **Required env vars**: `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Edge Function); `runtimeConfig.public.vapidPublicKey` (client).
 
+### Subscriptions (`users.subscription_status` + `revenuecat` Edge Function)
+
+Plan-based monetisation. Each user has three columns on `users` (`subscription_status`, `subscription_expires_at`, `subscription_platform`); the layer's `User` model exposes them. Apps define their plan tiers in `app.config.ts` and gate features in their own composables.
+
+- **`subscription_status`** values: `'free' | 'standard' | 'premium'` (CHECK-constrained on the users table; rename via app-side `plans[].label` rather than changing the categorical values).
+- **`revenuecat` Edge Function** (`supabase/functions/revenuecat/`): RevenueCat webhook handler. Verifies the shared secret, maps product IDs to tiers via the `REVENUECAT_PRODUCT_MAP` env var (JSON: `{"app_standard_monthly":"standard",…}`), and updates the user's three subscription columns. Handles `INITIAL_PURCHASE` / `RENEWAL` / `UNCANCELLATION` / `PRODUCT_CHANGE` / `CANCELLATION` / `EXPIRATION` / `BILLING_ISSUE` events; unknown event types are acknowledged (200) but no-op so RevenueCat doesn't retry.
+- **Set `app_user_id` to the Supabase user_id** when initialising the RevenueCat client (`Purchases.logIn(userId)`) — that's how the webhook knows whose row to update.
+- **Required env vars**: `REVENUECAT_WEBHOOK_SECRET`, `REVENUECAT_PRODUCT_MAP` (Edge Function).
+- **Plan gating** is app-side: apps wrap a `useSubscription()` composable that reads `profile.value.subscription_status` and exposes `isPaid` / `requiresPaid(label)` / per-feature limits.
+
 ### Activity formatting (`useActivityFormat`)
 
 Generic dispatch for activity-feed items. Apps declare their own activity-type map; the composable returns icon/color/description formatters that dispatch on `item.type`.
@@ -475,7 +485,7 @@ Generic dispatch for activity-feed items. Apps declare their own activity-type m
 
 - **Schema + models + DB helper functions**: this layer (`nuxt-supabase`)
 - **Composables** (`useStreak`, etc., pure data): this layer (`nuxt-supabase/app/composables/`)
-- **Edge Function `invite-send`**: this layer (`nuxt-supabase/supabase/functions/invite-send/`)
+- **Edge Functions `invite-send`, `notify-send`, `revenuecat`**: this layer (`nuxt-supabase/supabase/functions/`). Apps `cp` them into their own `supabase/functions/` via `npm run supabase` so they deploy with the app.
 - **App-specific RLS** that grants friend / group visibility on app tables: each consuming app's own migrations (use the `is_friend`, `is_group_member`, `is_group_member_with` functions)
 - **App-specific composables** (e.g. friends activity feed wrapping `loadFriendIds` + app-domain queries): each consuming app
 - **Each app calls `updateStreak(userId)`** at its own definition of "activity" — the layer doesn't know what triggers it

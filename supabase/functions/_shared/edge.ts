@@ -44,6 +44,25 @@ export type AuthFail = {
   response: Response;
 };
 
+// Verify the request was made server-to-server with the SERVICE_ROLE key.
+// Use this in Edge Functions that should NEVER be called by user clients —
+// e.g. push dispatchers and scheduled-cron handlers. Returns either an
+// admin Supabase client + ok: true, or a 401 Response to early-return.
+export type ServiceRoleOk = {
+  ok: true;
+  supabaseAdmin: any;
+};
+
+export function verifyServiceRole(req: Request): ServiceRoleOk | AuthFail {
+  const auth = req.headers.get("Authorization");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  if (auth !== `Bearer ${serviceKey}`) {
+    return { ok: false, response: errorResponse("Unauthorized", 401) };
+  }
+  const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+  return { ok: true, supabaseAdmin };
+}
+
 // Verify the request's Authorization header. On success returns Supabase
 // clients (admin = service role, user = scoped to caller's JWT) plus the
 // authenticated user. On failure returns a 401 Response — caller should
