@@ -8,8 +8,8 @@ This layer is being kept lean and OSS — core data-model primitives only (`Supa
 
 See [README.md](./README.md) for the full inventory. Quick state:
 
-- **Available**: `nuxt-ionic` (OSS), `nuxt-courses` (private, course/lesson/quiz), `nuxt-principles` (private, Stoic/Buddhist principle library), `nuxt-notifications` (private, push infrastructure)
-- **In progress** (private, being lifted out of this repo, one at a time): `nuxt-subscriptions` (billing), `nuxt-friends`, `nuxt-badges`
+- **Available**: `nuxt-ionic` (OSS), `nuxt-courses` (private, course/lesson/quiz), `nuxt-principles` (private, Stoic/Buddhist principle library), `nuxt-notifications` (private, push infrastructure), `nuxt-plans` (private, billing — RevenueCat + plan gating)
+- **In progress** (private, being lifted out of this repo, one at a time): `nuxt-friends`, `nuxt-badges`
 - **Stays here for now**: `streaks`, `likes`, `ai_calls`
 
 When working in a consuming app, check the README inventory before writing new infrastructure — it may already exist as a layer.
@@ -445,15 +445,9 @@ Polymorphic "user appreciates X" via `(item_type, item_id)`. Each app picks its 
 
 Push subscriptions (per-device endpoints), per-user notification settings (enabled / timezone / quiet hours / prefs jsonb), `is_quiet_hour()` SQL helper, `useNotifications()` composable, and the `notify-send` Edge Function dispatcher all live in [`nuxt-notifications`](../nuxt-notifications/CLAUDE.md). Apps that need push extend that layer.
 
-### Subscriptions (`users.subscription_status` + `revenuecat` Edge Function)
+### Subscriptions (billing) — moved to `nuxt-plans`
 
-Plan-based monetisation. Each user has three columns on `users` (`subscription_status`, `subscription_expires_at`, `subscription_platform`); the layer's `User` model exposes them. Apps define their plan tiers in `app.config.ts` and gate features in their own composables.
-
-- **`subscription_status`** values: `'free' | 'standard' | 'premium'` (CHECK-constrained on the users table; rename via app-side `plans[].label` rather than changing the categorical values).
-- **`revenuecat` Edge Function** (`supabase/functions/revenuecat/`): RevenueCat webhook handler. Verifies the shared secret, maps product IDs to tiers via the `REVENUECAT_PRODUCT_MAP` env var (JSON: `{"app_standard_monthly":"standard",…}`), and updates the user's three subscription columns. Handles `INITIAL_PURCHASE` / `RENEWAL` / `UNCANCELLATION` / `PRODUCT_CHANGE` / `CANCELLATION` / `EXPIRATION` / `BILLING_ISSUE` events; unknown event types are acknowledged (200) but no-op so RevenueCat doesn't retry.
-- **Set `app_user_id` to the Supabase user_id** when initialising the RevenueCat client (`Purchases.logIn(userId)`) — that's how the webhook knows whose row to update.
-- **Required env vars**: `REVENUECAT_WEBHOOK_SECRET`, `REVENUECAT_PRODUCT_MAP` (Edge Function).
-- **Plan gating** is app-side: apps wrap a `useSubscription()` composable that reads `profile.value.subscription_status` and exposes `isPaid` / `requiresPaid(label)` / per-feature limits.
+The `revenuecat` Edge Function, `usePlan()` composable, and `subscription_status` column convention all live in [`nuxt-plans`](../nuxt-plans/CLAUDE.md). Apps that need paid plans extend that layer.
 
 ### Activity formatting (`useActivityFormat`)
 
@@ -471,7 +465,7 @@ Generic dispatch for activity-feed items. Apps declare their own activity-type m
 
 - **Schema + models + DB helper functions**: this layer (`nuxt-supabase`)
 - **Composables** (`useStreak`, etc., pure data): this layer (`nuxt-supabase/app/composables/`)
-- **Edge Functions `invite-send`, `notify-send`, `revenuecat`**: this layer (`nuxt-supabase/supabase/functions/`). Apps `cp` them into their own `supabase/functions/` via `npm run supabase` so they deploy with the app.
+- **`invite-send` Edge Function**: this layer. Apps `cp` it into their own `supabase/functions/` via `npm run supabase` so it deploys with the app. (`notify-send` lives in `nuxt-notifications`; `revenuecat` lives in `nuxt-plans`.)
 - **App-specific RLS** that grants friend / group visibility on app tables: each consuming app's own migrations (use the `is_friend`, `is_group_member`, `is_group_member_with` functions)
 - **App-specific composables** (e.g. friends activity feed wrapping `loadFriendIds` + app-domain queries): each consuming app
 - **Each app calls `updateStreak(userId)`** at its own definition of "activity" — the layer doesn't know what triggers it

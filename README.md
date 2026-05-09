@@ -12,12 +12,12 @@ Apps extend `nuxt-supabase` plus whichever sub-layers they need.
 - **`nuxt-courses`** *(private)* — Course / Module / Lesson / Question / Answer machinery for learning apps. Lesson-section + question-type render components, paced-learning helpers. Used by any-learn-co, love-well.
 - **`nuxt-principles`** *(private)* — `principles` table + 23-principle Stoic/Buddhist seed, `Principle` / `Principles` models with cache + `loadBySlug`, `usePrinciplesStore`. Used by best-self, love-well.
 - **`nuxt-notifications`** *(private)* — push `subscriptions` (per-device) + `notifications` settings (per-user) + `is_quiet_hour()` SQL helper + `useNotifications()` composable + `notify-send` Edge Function dispatcher. Used by best-self, any-learn-co.
+- **`nuxt-plans`** *(private)* — billing: generic `usePlan()` composable (reads `users.subscription_status` + `useAppConfig().plans`) + `revenuecat` Edge Function webhook handler + convention docs for the `subscription_status` column and `plans` config. Renamed from `nuxt-subscriptions` to avoid name collision with the push `subscriptions` table in `nuxt-notifications`.
 
 ### In progress — actively being split out from this layer
 
 The features below currently live inside `nuxt-supabase` and are being moved out into their own private sub-layers so the OSS core stays lean and apps can opt in to what they need. Each split is its own commit; expect this section to change in the next several sessions.
 
-- **`nuxt-subscriptions`** — billing: `users.subscription_status` column convention + `useSubscription()` composable + `revenuecat` Edge Function. Independent.
 - **`nuxt-friends`** — `friends` + `groups` + `members` + `invites` + `kudos` + helpers `is_friend()` / `is_group_member()` / `is_group_member_with()`. Helpers are referenced by other layers' RLS, so this lifts before `nuxt-badges`.
 - **`nuxt-badges`** — `badges` + `awards` (with `Badge.award(userId, type)` idempotent API). Awards' friend/group visibility RLS depends on `nuxt-friends`'s helpers; cross-app RLS coordination handled per-app post-lift.
 
