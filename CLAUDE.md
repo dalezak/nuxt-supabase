@@ -366,7 +366,7 @@ Stores expose: `item`, `items`, `getItem`, `getItems`, `loadItem`, `loadItems`, 
 
 The `badges` + `awards` tables, `Badge` / `Badges` / `Award` / `Awards` models, the idempotent `Badge.award(userId, type)` API, and `useBadgesStore` (with `awardBadge` toast wrapper) all live in [`nuxt-badges`](../nuxt-badges/CLAUDE.md). Apps that need achievement primitives extend that layer.
 
-When both `nuxt-badges` and `nuxt-friends` are included, awards become viewable by friends + group co-members via `nuxt-friends`'s `extend_awards_friend_visibility.sql`.
+When both `nuxt-badges` and `nuxt-friends` are included, awards become viewable by friends + group co-members via `nuxt-friends`'s `awards_friend_visibility.sql`.
 
 ## Friends, groups, members, kudos, invites
 
