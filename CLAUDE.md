@@ -8,8 +8,9 @@ This layer is being kept lean and OSS — core data-model primitives only (`Supa
 
 See [README.md](./README.md) for the full inventory. Quick state:
 
-- **Available**: `nuxt-ionic` (OSS), `nuxt-courses` (private, course/lesson/quiz), `nuxt-principles` (private, Stoic/Buddhist principle library), `nuxt-notifications` (private, push infrastructure), `nuxt-plans` (private, billing), `nuxt-friends` (private, social graph), `nuxt-badges` (private, achievement primitives)
-- **All planned splits done.** This layer now holds only the lean OSS core: `users` / `streaks` / `likes` / `ai_calls` + base classes (`SupaModel`, `SupaModels`, `RestModel`, `RestModels`, `GraphModel`, `GraphModels`) + `useStorage` + `createSupaStore` + `useProfile` + Edge Function `_shared/`.
+- **Available**: `nuxt-ionic` (OSS), `nuxt-courses`, `nuxt-principles`, `nuxt-notifications`, `nuxt-plans`, `nuxt-friends`, `nuxt-badges`, `nuxt-streaks`, `nuxt-likes` (all private)
+- **Possible future split**: `nuxt-ai` — `ai_calls` migration + `_shared/claude.ts` SDK helper. Slightly trickier because `_shared/` is intertwined with other Edge Function helpers.
+- **Lean OSS core that stays here**: `users` (auth/profile) + `ai_calls` (rate-limit log) + base classes (`SupaModel`, `SupaModels`, `RestModel`, `RestModels`, `GraphModel`, `GraphModels`, `Model`, `Models`) + `createSupaStore` + `useStorage` + `useAppUser` / `useAuthSession` / `useProfile` composables + universal utils (`console-*`, `is-dev`, `is-prod`, `gravatar-url`, `invokeFunction`, `dayOfYear`, `formatRelative`) + `_shared/edge.ts` Edge Function helper.
 - **Stays here**: `users` (auth/profile), `streaks`, `likes`, `ai_calls` — these are the lean core
 
 When working in a consuming app, check the README inventory before writing new infrastructure — it may already exist as a layer.
@@ -375,27 +376,13 @@ Generic social primitives. Schemas + base models + helper functions live here so
 
 The social-graph primitives (friends, groups, members, invites, kudos) plus the `is_friend` / `is_group_member` / `is_group_member_with` SQL helpers, the `invite-send` Edge Function, and all related models + stores live in [`nuxt-friends`](../nuxt-friends/CLAUDE.md). Apps that need a social layer extend that layer.
 
-This layer's `streaks` table strips its friend / group SELECT policies to owner-only; `nuxt-friends` ships an extension migration that re-adds the friend / group visibility when both layers are included.
+### Streaks — moved to `nuxt-streaks`
 
-### `streaks`
+The `streaks` table, `Streak` / `Streaks` models, and `useStreak()` composable all live in [`nuxt-streaks`](../nuxt-streaks/CLAUDE.md). Apps that gamify activity (lesson completion, reflection cadence, etc.) extend that layer.
 
-Per-user activity streak with current/longest/lifetime tracking and one-day grace. One row per user (UNIQUE on `user_id`). Each app calls `useStreak().updateStreak(userId)` at its own activity moments — the layer maintains the math.
+### Likes — moved to `nuxt-likes`
 
-- **Columns**: `current_streak`, `longest_streak`, `lifetime_days`, `last_activity_at`, `grace_used`. `lifetime_days` is the "days of practice" metric — total distinct calendar days with activity, never resets, always grows. Lets apps frame progress positively (cumulative pride) alongside the optional streak (consistency).
-- **Composable**: `useStreak()` exposes `updateStreak(userId)` and `loadStreak(userId)`.
-- **Update logic** (inside `updateStreak`): same-day = no-op; 1-day gap = increment + reset grace; 2-day gap with grace available = increment + spend grace; larger gap = reset to 1. `lifetime_days` increments on any new calendar day.
-- **Returns** from `updateStreak`: `{ streak, gap, wasReset, isNew }`. `gap` is days between previous `last_activity_at` and now (0 if same day, null if first activity). `wasReset` is true when the streak dropped to 1. Apps use these for celebration logic (e.g. comeback badges fire when `wasReset || gap >= 3`).
-- **Layer policies**: streak rows are owner-only by default. Apps that include `nuxt-friends` get friend + group SELECT visibility added automatically via that layer's extension migration.
-- **Each app defines what activity counts**: BestSelf calls `updateStreak` after a reflection saves; any-learn calls it after a lesson completes. The layer is agnostic.
-
-### `likes`
-
-Polymorphic "user appreciates X" via `(item_type, item_id)`. Each app picks its own item types (`'reflection'`, `'lesson'`, `'post'`).
-
-- **Columns**: `user_id`, `item_type`, `item_id`, `content` (JSONB, optional — for likes carrying data like highlighted text or emoji choice).
-- **No UNIQUE on (user_id, item_type, item_id)** — supports both like-once semantics (apps add their own UNIQUE) and multi-like semantics (e.g. multiple highlights per item). Apps choose.
-- **Model**: `Like` / `Likes`. API: `Like.insert(userId, itemType, itemId, content)`, `Like.remove(userId, itemType, itemId)`, `Like.removeByContent(...)` (delete distinguished by JSONB content match), `Likes.loadForUserByType(userId, itemType, ...)`.
-- **RLS**: owner-only by default. Apps add friend / group visibility via additional policies if needed.
+The `likes` table (polymorphic via `(item_type, item_id)`) and `Like` / `Likes` models live in [`nuxt-likes`](../nuxt-likes/CLAUDE.md). Apps with social-appreciation features extend that layer.
 
 ### Push notifications — moved to `nuxt-notifications`
 
