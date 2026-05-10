@@ -9,9 +9,9 @@ This layer is being kept lean and OSS — core data-model primitives only (`Supa
 See [README.md](./README.md) for the full inventory. Quick state:
 
 - **Available**: `nuxt-ionic` (OSS), `nuxt-courses`, `nuxt-principles`, `nuxt-notifications`, `nuxt-plans`, `nuxt-friends`, `nuxt-badges`, `nuxt-streaks`, `nuxt-likes` (all private)
-- **Possible future split**: `nuxt-ai` — `ai_calls` migration + `_shared/claude.ts` SDK helper. Slightly trickier because `_shared/` is intertwined with other Edge Function helpers.
-- **Lean OSS core that stays here**: `users` (auth/profile) + `ai_calls` (rate-limit log) + base classes (`SupaModel`, `SupaModels`, `RestModel`, `RestModels`, `GraphModel`, `GraphModels`, `Model`, `Models`) + `createSupaStore` + `useStorage` + `useAppUser` / `useAuthSession` / `useProfile` composables + universal utils (`console-*`, `is-dev`, `is-prod`, `gravatar-url`, `invokeFunction`, `dayOfYear`, `formatRelative`) + `_shared/edge.ts` Edge Function helper.
-- **Stays here**: `users` (auth/profile), `streaks`, `likes`, `ai_calls` — these are the lean core
+- **Possible future split**: `nuxt-ai` — `ai_usage` migration + `_shared/claude.ts` SDK helper. Slightly trickier because `_shared/` is intertwined with other Edge Function helpers.
+- **Lean OSS core that stays here**: `users` (auth/profile) + `ai_usage` (rate-limit / usage log) + base classes (`SupaModel`, `SupaModels`, `RestModel`, `RestModels`, `GraphModel`, `GraphModels`, `Model`, `Models`) + `createSupaStore` + `useStorage` + `useAppUser` / `useAuthSession` / `useProfile` composables + universal utils (`console-*`, `is-dev`, `is-prod`, `gravatar-url`, `invokeFunction`, `dayOfYear`, `formatRelative`) + `_shared/edge.ts` Edge Function helper.
+- **Stays here**: `users` (auth/profile) + `ai_usage` — these are the lean core
 
 When working in a consuming app, check the README inventory before writing new infrastructure — it may already exist as a layer.
 

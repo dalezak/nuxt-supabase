@@ -18,12 +18,12 @@ Apps extend `nuxt-supabase` plus whichever sub-layers they need.
 - **`nuxt-streaks`** *(private)* — comeback-aware streak primitives: `streaks` table + `Streak` / `Streaks` models + `useStreak()` composable. Owner-only by default; `nuxt-friends` adds friend / group visibility when present.
 - **`nuxt-likes`** *(private)* — polymorphic likes via `(item_type, item_id)`: `likes` table + `Like` / `Likes` models. Apps pick their own item types and decide like-once vs multi-like via app-side migrations.
 
-**Possible future split**: `nuxt-ai` — `ai_calls` migration + `_shared/claude.ts` SDK helper.
+**Possible future split**: `nuxt-ai` — `ai_usage` migration + `_shared/claude.ts` SDK helper.
 
 ### Stays in `nuxt-supabase` (the lean core)
 
 - **`users`** + auth/profile — every app needs auth
-- **`ai_calls`** — AI rate-limit log + `_shared/claude.ts` + `_shared/edge.ts` Edge Function helpers
+- **`ai_usage`** — AI rate-limit / usage log + `_shared/claude.ts` + `_shared/edge.ts` Edge Function helpers
 - Base classes (`SupaModel` / `SupaModels` / `RestModel` / `RestModels`), `createSupaStore`, `useProfile`, `useAuthSession`, `useAppUser`, `useStorage`
 
 ### Layer privacy
