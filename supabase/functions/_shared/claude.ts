@@ -10,22 +10,39 @@
 // Thinking is opt-in via `thinking: { type: "adaptive" }` — match the
 // Anthropic SDK's behavior exactly.
 //
-// Usage:
-//   const result = await callClaude({
-//     model: "claude-haiku-4-5-20251001",
-//     max_tokens: 200,
-//     system: "You classify topics. Reply with JSON: {\"valid\": bool}",
-//     user: `Topic: "${topic}"`,
-//   });
-//   if (result.truncated) throw new Error("response truncated");
-//   const data = parseJSON(result.text);
+// Two calling styles, pick whichever fits:
+//
+// 1. Single-shot — pass `user` as a string. The helper wraps it as one
+//    user message:
+//
+//      callClaude({ system: "...", user: `Topic: "${topic}"` });
+//
+// 2. Multi-turn — pass `messages` directly. Required for conversational
+//    history (e.g. coaching chat) so the SDK sees proper alternating
+//    user/assistant turns. Must end with a `user` role so the model can
+//    respond:
+//
+//      callClaude({ system: "...", messages: [
+//        { role: "user", content: "..." },
+//        { role: "assistant", content: "..." },
+//        { role: "user", content: "..." },
+//      ]});
+//
+// Exactly one of `user` / `messages` must be set.
 
 import Anthropic from "npm:@anthropic-ai/sdk";
+
+export type ClaudeMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 export type ClaudeCallOptions = {
   model?: string;
   system: string;
-  user: string;
+  // Provide EITHER `user` (single-shot) OR `messages` (multi-turn).
+  user?: string;
+  messages?: ClaudeMessage[];
   max_tokens?: number;
   thinking?: { type: "adaptive" | "disabled" };
   effort?: "low" | "medium" | "high" | "max" | "xhigh";
@@ -42,13 +59,24 @@ export async function callClaude(options: ClaudeCallOptions): Promise<ClaudeCall
   const apiKey = options.apiKey ?? Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
+  // Build the messages array — single-shot wraps `user`; multi-turn passes
+  // through. Caller must provide one or the other.
+  let messages: ClaudeMessage[];
+  if (options.messages && options.messages.length > 0) {
+    messages = options.messages;
+  } else if (typeof options.user === "string") {
+    messages = [{ role: "user", content: options.user }];
+  } else {
+    throw new Error("callClaude requires either `user` (single-shot) or `messages` (multi-turn)");
+  }
+
   const anthropic = new Anthropic({ apiKey });
 
   const requestBody: any = {
     model: options.model ?? "claude-opus-4-7",
     max_tokens: options.max_tokens ?? 16000,
     system: options.system,
-    messages: [{ role: "user", content: options.user }],
+    messages,
   };
   if (options.thinking) requestBody.thinking = options.thinking;
   if (options.effort) requestBody.output_config = { effort: options.effort };
