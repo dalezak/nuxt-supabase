@@ -2,6 +2,7 @@ create table "public"."users" (
     "id" uuid not null,
     "email" character varying not null,
     "name" character varying not null,
+    "avatar_url" text,
     "created_at" timestamp without time zone default now(),
     "updated_at" timestamp without time zone default now()
 );
@@ -17,9 +18,12 @@ alter table "public"."users" add constraint "users_pkey" PRIMARY KEY using index
 
 alter table "public"."users" add constraint "users_email_key" UNIQUE using index "users_email_key";
 
-alter table "public"."users" add constraint "users_id_fkey" FOREIGN KEY (id) REFERENCES auth.users(id) not valid;
-
-alter table "public"."users" validate constraint "users_id_fkey";
+-- Cascade auth-side deletes through public.users so child tables that FK to
+-- public.users(id) (results, awards, likes, enrollments, friends, etc.) also
+-- get cleaned up when a Supabase auth user is deleted. Child tables FK to
+-- public.users (not auth.users) so PostgREST can resolve the relationship
+-- and serve `users(name, email, avatar_url)` joins.
+alter table "public"."users" add constraint "users_id_fkey" FOREIGN KEY (id) REFERENCES auth.users(id) on delete cascade;
 
 create policy "Enable delete for users based on user_id"
 on "public"."users"

@@ -63,10 +63,10 @@ describe('User.signup()', () => {
     expect(user.name).toBe('Alice')
   })
 
-  it('returns null on auth error', async () => {
+  it('throws the auth error so callers can match on code/message', async () => {
     vi.stubGlobal('useSupabaseClient', () => ({ auth: makeAuth() }))
-    const user = await User.signup('alice@example.com', 'secret', 'Alice')
-    expect(user).toBeNull()
+    await expect(User.signup('alice@example.com', 'secret', 'Alice'))
+      .rejects.toThrow()
   })
 })
 

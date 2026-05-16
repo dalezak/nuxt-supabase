@@ -87,6 +87,40 @@ export async function verifyAuth(req: Request): Promise<AuthOk | AuthFail> {
   return { ok: true, user, supabaseAdmin, supabaseUser };
 }
 
+// Enforce a per-user-per-day rate limit on calls to a named function via
+// the `ai_usage` log. Returns a 429 Response when exceeded (caller should
+// early-return it), or null to proceed. Always inserts the usage row on
+// success — counts cost regardless of whether the downstream AI call
+// succeeds, so failed-but-attempted requests still count.
+//
+// Usage:
+//   const limited = await enforceRateLimit(supabaseAdmin, user.id, FUNCTION_NAME, 30);
+//   if (limited) return limited;
+//
+// Caller customises the user-facing 429 message via the optional 4th arg.
+export async function enforceRateLimit(
+  supabaseAdmin: any,
+  userId: string,
+  functionName: string,
+  perDay: number,
+  errorMessage = "Daily limit reached. Try again tomorrow.",
+): Promise<Response | null> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await supabaseAdmin
+    .from("ai_usage")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("function_name", functionName)
+    .gte("created_at", cutoff);
+  if ((count ?? 0) >= perDay) {
+    return errorResponse(errorMessage, 429);
+  }
+  await supabaseAdmin
+    .from("ai_usage")
+    .insert({ user_id: userId, function_name: functionName });
+  return null;
+}
+
 // Wrap an Edge Function handler with CORS preflight + try/catch error
 // handling. Thrown errors become 500 JSON responses; the handler can still
 // return its own status codes via jsonResponse / errorResponse.

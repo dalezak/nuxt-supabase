@@ -31,6 +31,7 @@
 // Exactly one of `user` / `messages` must be set.
 
 import Anthropic from "npm:@anthropic-ai/sdk";
+import { errorResponse } from "./edge.ts";
 
 export type ClaudeMessage = {
   role: "user" | "assistant";
@@ -101,4 +102,37 @@ export function parseJSON<T = any>(text: string): T {
     .replace(/\s*```\s*$/, "")
     .trim();
   return JSON.parse(stripped);
+}
+
+// Call Claude expecting a JSON response, then handle the two failure modes
+// (truncated response + invalid JSON) as 502 Responses ready for the caller
+// to early-return. Bundles `callClaude` + truncation guard + `parseJSON` +
+// log-and-return-502 on parse error — the boilerplate every JSON-output
+// Edge Function repeats verbatim.
+//
+// Return is a union: parsed data on success, Response on either error. The
+// caller can branch with `instanceof Response`:
+//
+//   const result = await callClaudeJSON<MyShape>(options, "my-function");
+//   if (result instanceof Response) return result;
+//   // result is MyShape here — narrowed by the type guard
+//
+// `errorContext` is logged with the raw text on parse failures (defaults
+// to "callClaudeJSON" — pass the function name for traceability).
+export async function callClaudeJSON<T = any>(
+  options: ClaudeCallOptions,
+  errorContext = "callClaudeJSON",
+): Promise<T | Response> {
+  const result = await callClaude(options);
+
+  if (result.truncated) {
+    return errorResponse("AI response truncated.", 502);
+  }
+
+  try {
+    return parseJSON<T>(result.text);
+  } catch (_) {
+    console.error(`${errorContext} parse error:`, result.text);
+    return errorResponse("AI returned invalid JSON. Please try again.", 502);
+  }
 }

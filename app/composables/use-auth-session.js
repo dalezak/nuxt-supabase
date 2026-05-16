@@ -3,6 +3,14 @@
 const _isAuthenticated = ref(false);
 let _initialized = false;
 
+// Synchronous setter for callers that just completed a login/signup/logout and
+// can't afford to wait for Supabase's onAuthStateChange event (which fires a
+// microtask later). Prevents a brief "logged-out tabs" flash during navigation
+// right after signInWithPassword resolves.
+export function setAuthenticated(value) {
+  _isAuthenticated.value = !!value;
+}
+
 export function useAuthSession() {
   // useSupabaseUser() works on both server and client via @nuxtjs/supabase
   const user = useSupabaseUser();

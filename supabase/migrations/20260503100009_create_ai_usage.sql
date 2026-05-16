@@ -23,7 +23,7 @@ create unique index ai_usage_pkey on public.ai_usage using btree (id);
 create index ai_usage_user_function_created_idx on public.ai_usage using btree (user_id, function_name, created_at desc);
 
 alter table "public"."ai_usage" add constraint "ai_usage_pkey" primary key using index "ai_usage_pkey";
-alter table "public"."ai_usage" add constraint "ai_usage_user_id_fkey" foreign key (user_id) references auth.users(id) on delete cascade;
+alter table "public"."ai_usage" add constraint "ai_usage_user_id_fkey" foreign key (user_id) references public.users(id) on delete cascade;
 
 alter table "public"."ai_usage" enable row level security;
 

@@ -1,4 +1,5 @@
 import SupaModel from './SupaModel';
+import { setAuthenticated } from '../composables/use-auth-session';
 
 export default class User extends SupaModel {
 
@@ -114,6 +115,9 @@ export default class User extends SupaModel {
     }
     else if (auth && auth.user) {
       consoleLog("User.login", auth);
+      // Update synchronously so callers that navigate immediately (e.g.
+      // showPageIndex) see the authenticated tab set on the first read.
+      setAuthenticated(true);
       let user = new User();
       user.id = auth.user.id;
       user.email = auth.user.email;
@@ -127,7 +131,9 @@ export default class User extends SupaModel {
   // Creates a new Supabase auth account with email + password.
   // name is stored on the returned User but not saved to DB here —
   // call user.save() after signup to persist the profile row.
-  // Returns a User on success, null on error.
+  // Returns a User on success. Throws the Supabase AuthApiError on failure
+  // (e.g. "User already registered", "Password should be at least…") so
+  // callers can match `error.code` / `error.message` for tailored UX.
   static async signup(email, password, name) {
     const Supabase = useSupabaseClient();
     const { data: auth, error } = await Supabase.auth.signUp({
@@ -136,10 +142,13 @@ export default class User extends SupaModel {
     });
     if (error) {
       consoleError("User.signup", error);
-      return null;
+      throw error;
     }
-    else if (auth && auth.user) {
+    if (auth?.user) {
       consoleLog("User.signup", auth);
+      // Update synchronously so callers that navigate immediately (e.g.
+      // showPageIndex) see the authenticated tab set on the first read.
+      setAuthenticated(true);
       let user = new User();
       user.id = auth.user.id;
       user.email = auth.user.email;
@@ -162,6 +171,10 @@ export default class User extends SupaModel {
       const Supabase = useSupabaseClient();
       await Supabase.auth.signOut();
       consoleLog("User.logout", "session cleared");
+
+      // Symmetric to login — flip synchronously so the tab bar swaps to the
+      // public set immediately, not after onAuthStateChange fires.
+      setAuthenticated(false);
 
       return true;
     }
