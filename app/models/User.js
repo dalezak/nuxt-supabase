@@ -44,6 +44,27 @@ export default class User extends SupaModel {
     return this.saveModel(User, "users", ["id", "name", "email", "avatar_url"]);
   }
 
+  // Patch any subset of a user's columns by id. The layer's User class
+  // intentionally doesn't list every app-extended field (study goals,
+  // notification preferences, etc.); this method lets app stores update
+  // those without needing a User instance or subclass. Returns the fresh
+  // row, or null on error.
+  static async update(userId, patch) {
+    if (!userId || !patch) return null;
+    const client = useSupabaseClient();
+    const { data, error } = await client
+      .from('users')
+      .update(patch)
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) {
+      consoleError('User.update', userId, error);
+      return null;
+    }
+    return new User(data);
+  }
+
   // Returns the best available avatar URL: uploaded photo, then Gravatar, then null.
   static async avatarUrl(email, uploadedUrl = null) {
     if (uploadedUrl) return uploadedUrl;

@@ -110,6 +110,20 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
     return new User(userData).uploadAvatar(file);
   }
 
+  // Patch any subset of a user's columns by id. Useful for app-specific
+  // fields that the layer's User model doesn't list (e.g. study goals).
+  // Refreshes `profile` and the local-storage cache when the patched user
+  // is the authed one — without the cache refresh, `loadProfile` would
+  // restore the pre-patch row on the next page load.
+  async function updateUser(userId, patch) {
+    const fresh = await User.update(userId, patch);
+    if (fresh && profile.value?.id === userId) {
+      profile.value = fresh;
+      await fresh.store();
+    }
+    return fresh;
+  }
+
   return {
     profile,
     loadProfile,
@@ -121,5 +135,6 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
     updatePassword,
     avatarUrl,
     uploadAvatar,
+    updateUser,
   };
 });
