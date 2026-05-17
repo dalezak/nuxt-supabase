@@ -121,6 +121,42 @@ export async function enforceRateLimit(
   return null;
 }
 
+// Enforce a per-user-per-calendar-month AI budget across ALL functions for
+// a user. Counts every row in `ai_usage` for the user since the start of
+// the current month (UTC), regardless of `function_name`. The budget is a
+// plan-level total — caller resolves it from the user's plan
+// (e.g. `plans[user.subscription_status].ai_per_month`) and passes the
+// number in.
+//
+// Unlike `enforceRateLimit`, this does NOT insert a usage row — it only
+// checks. Pair with a separate `enforceRateLimit` call (which inserts) or
+// an explicit insert. The split keeps the two concerns independent: a
+// function can have a per-day cap AND share a per-month plan budget.
+//
+// Usage:
+//   const overBudget = await enforceMonthlyBudget(supabaseAdmin, user.id, plan.ai_per_month);
+//   if (overBudget) return overBudget;
+//   const limited = await enforceRateLimit(supabaseAdmin, user.id, FUNCTION_NAME, 30);
+//   if (limited) return limited;
+export async function enforceMonthlyBudget(
+  supabaseAdmin: any,
+  userId: string,
+  perMonth: number,
+  errorMessage = "Monthly AI limit reached. Upgrade your plan for more.",
+): Promise<Response | null> {
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const { count } = await supabaseAdmin
+    .from("ai_usage")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", monthStart);
+  if ((count ?? 0) >= perMonth) {
+    return errorResponse(errorMessage, 429);
+  }
+  return null;
+}
+
 // Wrap an Edge Function handler with CORS preflight + try/catch error
 // handling. Thrown errors become 500 JSON responses; the handler can still
 // return its own status codes via jsonResponse / errorResponse.
