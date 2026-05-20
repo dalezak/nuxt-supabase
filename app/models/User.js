@@ -40,8 +40,8 @@ export default class User extends SupaModel {
 
   // Upserts this user to Supabase (id, name, email, avatar_url).
   // Returns a fresh User from the DB response, or null on error.
-  async save() {
-    return this.saveModel(User, "users", ["id", "name", "email", "avatar_url"]);
+  async save(extraAttributes = []) {
+    return this.saveModel(User, "users", ["id", "name", "email", "avatar_url", ...extraAttributes]);
   }
 
   // Patch any subset of a user's columns by id. The layer's User class
