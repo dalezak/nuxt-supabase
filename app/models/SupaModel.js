@@ -64,6 +64,27 @@ export default class SupaModel extends Model {
     }
   }
 
+  // Updates rows in table matching all `where` conditions (AND) with `values`.
+  // Useful when callers need to write `*_at` columns or other fields that
+  // `getValues()` filters out — `saveModel` strips suffix-matched fields,
+  // so partial updates of timestamps go through here instead.
+  // Returns the updated row when `where` targets a single row, or null on
+  // error / no match. Throws on Supabase error.
+  static async updateModel(table, where, values) {
+    const Supabase = useSupabaseClient();
+    let query = Supabase.from(table).update(values);
+    for (let key of Object.keys(where)) {
+      if (where[key] == null) return null;
+      query = query.eq(key, where[key]);
+    }
+    const { data, error } = await query.select().maybeSingle();
+    if (error) {
+      consoleError("SupaModel.updateModel", table, error);
+      throw error;
+    }
+    return data;
+  }
+
   // Upserts a row into table. onConflict is a comma-separated string of
   // conflict columns, e.g. 'user_id,question_id'.
   // ignoreDuplicates — if true, do nothing on conflict (don't overwrite existing row).

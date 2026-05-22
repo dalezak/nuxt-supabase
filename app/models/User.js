@@ -51,18 +51,13 @@ export default class User extends SupaModel {
   // row, or null on error.
   static async update(userId, patch) {
     if (!userId || !patch) return null;
-    const client = useSupabaseClient();
-    const { data, error } = await client
-      .from('users')
-      .update(patch)
-      .eq('id', userId)
-      .select()
-      .single();
-    if (error) {
+    try {
+      const data = await this.updateModel('users', { id: userId }, patch);
+      return data ? new User(data) : null;
+    } catch (error) {
       consoleError('User.update', userId, error);
       return null;
     }
-    return new User(data);
   }
 
   // Returns the best available avatar URL: uploaded photo, then Gravatar, then null.
@@ -124,6 +119,12 @@ export default class User extends SupaModel {
 
   // Signs in with email + password via Supabase.
   // Returns a User on success, null on error or if no user is returned.
+  //
+  // After auth succeeds, hydrates the returned User from the `users` table
+  // — auth metadata alone doesn't carry app-extended fields like
+  // `subscription_status`, so without this paid users would silently fall
+  // back to the class-field default ('free') on every login and any
+  // `loadProfile()` short-circuit would lock that in.
   static async login(email, password) {
     const Supabase = useSupabaseClient();
     const { data: auth, error } = await Supabase.auth.signInWithPassword({
@@ -139,6 +140,10 @@ export default class User extends SupaModel {
       // Update synchronously so callers that navigate immediately (e.g.
       // showPageIndex) see the authenticated tab set on the first read.
       setAuthenticated(true);
+      const full = await User.load(auth.user.id);
+      if (full) return full;
+      // Fallback to auth metadata if the users row isn't there yet (edge
+      // case: auth account created out-of-band before the profile row).
       let user = new User();
       user.id = auth.user.id;
       user.email = auth.user.email;
@@ -226,13 +231,16 @@ export default class User extends SupaModel {
 
   // Updates subscription fields for a user by id (called from webhook).
   static async updateSubscription(userId, status, expiresAt, platform) {
-    const Supabase = useSupabaseClient();
-    const { error } = await Supabase
-      .from('users')
-      .update({ subscription_status: status, subscription_expires_at: expiresAt, subscription_platform: platform })
-      .eq('id', userId);
-    if (error) consoleError('User.updateSubscription', error);
-    return !error;
+    try {
+      await this.updateModel('users',
+        { id: userId },
+        { subscription_status: status, subscription_expires_at: expiresAt, subscription_platform: platform },
+      );
+      return true;
+    } catch (error) {
+      consoleError('User.updateSubscription', error);
+      return false;
+    }
   }
 
   // Updates the password for the currently authenticated user.

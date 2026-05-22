@@ -155,7 +155,17 @@ When uncertain, ask: "Would another app extending this layer want this?" If yes,
 
 - **Nuxt 4 globals**: Use `import.meta.client` / `import.meta.server` instead of the deprecated `process.client` / `process.server`. Use `import.meta.dev` / `import.meta.prod` instead of `process.env.NODE_ENV` checks.
 - **Auto-imports**: Nuxt auto-imports composables (`useStorage`, `useAppUser`, `useAuthSession`, `useProfile`, `useSupabaseClient`, `useSupabaseUser`, `useRuntimeConfig`) and utils (`consoleLog`, `consoleWarn`, `consoleError`, `consoleInfo`, `createSupaStore`, `invokeFunction`, `gravatarUrl`, `isDev`, `isProd`). Do not import these manually in app code.
-- **Class imports are explicit**. Models, collections, and base classes (`SupaModel`, `SupaModels`, `RestModel`, `RestModels`, `User`, `Users`) are NOT auto-imported — Nuxt only auto-imports composables and utils. Consuming apps reference layer classes via relative paths (e.g. `import SupaModel from '../../../nuxt-supabase/app/models/SupaModel'`); the consuming app's own models live in `app/models/` and are imported with `~/models/Course`.
+- **Class imports are explicit**. Models, collections, and base classes (`SupaModel`, `SupaModels`, `RestModel`, `RestModels`, `User`, `Users`) are NOT auto-imported — Nuxt only auto-imports composables and utils. Consuming apps reference layer classes via the `#layers/<layer-name>/...` alias (Nuxt 3.16+ / 4.x) — e.g. `import SupaModel from '#layers/nuxt-supabase/app/models/SupaModel'`. The consuming app's own models live in `app/models/` and are imported with `~/models/Course`. **Do not use deep relative paths** (`../../../nuxt-supabase/...`) — they break when files move and read poorly from deeply-nested pages.
+- **Layer name registration is required for external sibling-repo layers.** Nuxt auto-names layers that live in a project-local `layers/` folder, but for layers extended via relative path (`extends: ['../nuxt-supabase']`), each layer MUST declare its own name in its `nuxt.config.ts`:
+
+  ```ts
+  export default defineNuxtConfig({
+    $meta: { name: 'nuxt-supabase' },
+    // ...
+  })
+  ```
+
+  Without `$meta`, the `#layers/<name>` alias fails to register and you get "Failed to resolve import" / "Missing specifier" errors at build time. The path within the alias is layer-root-relative (so `app/models/X`, not `models/X`) regardless of what `srcDir` the layer sets. Restart `nuxt dev` after adding `$meta` to a layer — Vite caches alias registrations at startup.
 - **Model pattern**: Subclass `SupaModel` / `SupaModels` for database-backed models. Override `save()`, `delete()`, and `load()` to delegate to the helpers below. `store()` / `restore()` are opt-in — implement them only when local-storage caching is safe for that data (see "Local storage caching" below).
 - **SupaModel helpers**:
   - `loadModel(modelClass, table, where)` — fetches a single row via `.single()`; PGRST116 (no rows) is silently ignored
@@ -211,6 +221,57 @@ export default class Course extends SupaModel {
   }
 }
 ```
+
+### Why `super(data)` AND `Object.assign(this, data)`?
+
+JS class-field initializers in derived classes run **after** `super()` returns but **before** the derived constructor body. So when `Model`'s constructor does `Object.assign(this, data)`, any class-field initializer in the subclass (`id = null`, `topic = null`) immediately overwrites what super set. The second `Object.assign(this, data)` in the derived constructor restores the data over those defaults.
+
+If you forget it, the model looks fully constructed but every declared field is `null` regardless of what `data` carried — `save()` then writes nothing useful and there's no error to grep for. Cheap to add, expensive to debug. The convention is: every `SupaModel` subclass with class-field initializers ends its constructor with `Object.assign(this, data)`.
+
+### Subclassing a layer model in an app (extends a layer-shipped class)
+
+When an app needs to add columns to a layer-shipped model (e.g. best-self's `Reflection` adds `habit_id` + `suggestion_id` on top of `nuxt-reflections`'s base `Reflection`), the pattern is:
+
+```js
+import LayerReflection from '#layers/nuxt-reflections/app/models/Reflection';
+
+export default class Reflection extends LayerReflection {
+  habit_id = null;
+  suggestion_id = null;
+
+  constructor(data = {}) {
+    super(data);
+    Object.assign(this, data);   // re-apply over the class-field initializers above
+  }
+
+  async save() {
+    return super.save(['habit_id', 'suggestion_id']);  // pass extra attrs through to the layer's save
+  }
+}
+```
+
+App-side migration adds the columns to the layer's table. The layer's `save()` accepts extra attribute names so subclasses extend the persisted column list without forking the method.
+
+### Pinia store id collisions (layer ships a store, app extends the model)
+
+`createSupaStore` is a `defineStore` wrapper that closes over the **model class** used at creation time. If both a layer and an app call `createSupaStore('reflections', ...)`, Pinia registers under the same id but only one closure wins. If the layer's wins, the default `saveItem` instantiates the layer's `Reflection` — silently dropping the app's `habit_id` / `suggestion_id` fields on save.
+
+The app-side override forces the correct class:
+
+```js
+import Reflection from '~/models/Reflection';
+
+export const useReflectionsStore = createSupaStore('reflections', Reflection, Reflections, () => ({
+  // Override the generic saveItem so it uses the app-side Reflection class,
+  // sidestepping the layer-store shadow described above.
+  async saveItem(data) {
+    return new Reflection(data).save();
+  },
+  // ... other actions
+}));
+```
+
+The same pattern applies to `loadItem` if the app needs custom row hydration. Stores that only re-export layer methods (no extra columns) don't need the override.
 
 `SupaModels` subclass — a thin collection wrapper, with static query helpers used by the store:
 

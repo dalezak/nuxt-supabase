@@ -1,7 +1,26 @@
 export default class Model {
 
-  // Hydrates the model with plain data. Subclasses call super(data) then
-  // Object.assign(this, data) to apply field defaults before merging.
+  // Hydrates the model with plain data via `Object.assign`.
+  //
+  // ⚠️ Subclasses that add class-field initializers (e.g. `habit_id = null`)
+  // MUST re-apply data in their own constructor:
+  //
+  //   class Reflection extends Model {
+  //     habit_id = null;       // declared for IDE hints + default value
+  //     constructor(data = {}) {
+  //       super(data);          // base does Object.assign(this, data)
+  //       Object.assign(this, data);  // re-apply — see note below
+  //     }
+  //   }
+  //
+  // Why: JS class-field initializers in derived classes run AFTER super()
+  // returns but BEFORE the derived constructor body. So the sequence is:
+  //   1. super(data) runs base constructor → sets `this.habit_id = data.habit_id`
+  //   2. derived class fields run → `this.habit_id = null` (clobbers step 1)
+  //   3. derived constructor body runs → second Object.assign restores it
+  //
+  // Subclasses without class-field initializers don't need the workaround.
+  // The base constructor's assign is enough.
   constructor(data = {}) {
     Object.assign(this, data);
   }
