@@ -44,6 +44,56 @@ export default class RestModel extends Model {
     return null;
   }
 
+  // Like loadModel but for optional lookups — logs at warn level (not error)
+  // when the endpoint returns 404 / empty, since "not found" is a legitimate
+  // outcome rather than a failure. Mirrors SupaModel.findModel semantics for
+  // REST APIs where the same resource may or may not exist.
+  static async findModel(modelClass, url, params = {}) {
+    const { error, data: response } = await useFetch(url, {
+      key: this.urlQuery(url, params),
+      params: params
+    });
+    if (error.value) {
+      consoleWarn("RestModel.findModel", modelClass.name, error.value);
+      return null;
+    }
+    else if (response.value) {
+      consoleLog("RestModel.findModel", modelClass.name, response.value);
+      return new modelClass(response.value);
+    }
+    return null;
+  }
+
+  // POSTs values to url to create a new resource.
+  // Does not return a hydrated model (mirrors SupaModel.insertModel — avoids
+  // an extra round-trip when the caller doesn't need the server response).
+  // Throws on error.
+  static async insertModel(url, values = {}) {
+    const { error } = await useFetch(url, {
+      method: 'post',
+      body: values
+    });
+    if (error.value) {
+      consoleError("RestModel.insertModel", url, error.value);
+      throw error.value;
+    }
+  }
+
+  // PATCHes (default) or PUTs values to url to partially update a resource.
+  // Use this when the caller needs to write fields that `getValues()` filters
+  // out (timestamps, server-managed fields) or when the response body isn't
+  // needed. Throws on error.
+  static async updateModel(url, values = {}, method = 'patch') {
+    const { error } = await useFetch(url, {
+      method: method,
+      body: values
+    });
+    if (error.value) {
+      consoleError("RestModel.updateModel", url, error.value);
+      throw error.value;
+    }
+  }
+
   // POSTs (insert) or PUTs (update) values to url.
   // Uses PUT when this.id is set, POST otherwise.
   // Returns a freshly hydrated modelClass instance, or null on error.

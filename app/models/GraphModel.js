@@ -53,6 +53,89 @@ export default class GraphModel extends Model {
     return null;
   }
 
+  // Like loadModel but for optional lookups — logs at warn level (not error)
+  // when the query returns null, since a missing record is a legitimate
+  // outcome rather than a failure. Mirrors SupaModel.findModel semantics.
+  static async findModel(modelClass, url, query, variables = {}, dataKey) {
+    const { error, data: response } = await useFetch(url, {
+      method: 'post',
+      body: { query, variables }
+    });
+    if (error.value) {
+      consoleWarn("GraphModel.findModel", modelClass.name, error.value);
+      return null;
+    }
+    const payload = response.value;
+    if (payload?.errors?.length) {
+      consoleWarn("GraphModel.findModel", modelClass.name, payload.errors);
+      return null;
+    }
+    const row = dataKey
+      ? payload?.data?.[dataKey]
+      : Object.values(payload?.data ?? {})[0];
+    if (row) {
+      consoleLog("GraphModel.findModel", modelClass.name, row);
+      return new modelClass(row);
+    }
+    return null;
+  }
+
+  // POSTs a create mutation without rehydrating. Use when the caller doesn't
+  // need the server response (mirrors SupaModel.insertModel). Throws on error.
+  static async insertModel(url, mutation, variables = {}) {
+    const { error, data: response } = await useFetch(url, {
+      method: 'post',
+      body: { query: mutation, variables }
+    });
+    if (error.value) {
+      consoleError("GraphModel.insertModel", url, error.value);
+      throw error.value;
+    }
+    const payload = response.value;
+    if (payload?.errors?.length) {
+      consoleError("GraphModel.insertModel", url, payload.errors);
+      throw payload.errors;
+    }
+  }
+
+  // POSTs an update mutation without rehydrating. Use for partial updates
+  // of fields that `getValues()` filters out, or when the response body
+  // isn't needed. Throws on error.
+  static async updateModel(url, mutation, variables = {}) {
+    const { error, data: response } = await useFetch(url, {
+      method: 'post',
+      body: { query: mutation, variables }
+    });
+    if (error.value) {
+      consoleError("GraphModel.updateModel", url, error.value);
+      throw error.value;
+    }
+    const payload = response.value;
+    if (payload?.errors?.length) {
+      consoleError("GraphModel.updateModel", url, payload.errors);
+      throw payload.errors;
+    }
+  }
+
+  // POSTs an upsert mutation without rehydrating. GraphQL has no native
+  // upsert verb — the mutation string itself encodes the on-conflict
+  // behavior (e.g. PostgREST/Hasura `on_conflict` clauses). Throws on error.
+  static async upsertModel(url, mutation, variables = {}) {
+    const { error, data: response } = await useFetch(url, {
+      method: 'post',
+      body: { query: mutation, variables }
+    });
+    if (error.value) {
+      consoleError("GraphModel.upsertModel", url, error.value);
+      throw error.value;
+    }
+    const payload = response.value;
+    if (payload?.errors?.length) {
+      consoleError("GraphModel.upsertModel", url, payload.errors);
+      throw payload.errors;
+    }
+  }
+
   // POSTs a GraphQL mutation and returns a freshly hydrated modelClass instance.
   // mutation  — GraphQL mutation string; subclass picks create vs update based on this.id
   // variables — plain object of mutation variables

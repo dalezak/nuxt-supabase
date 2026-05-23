@@ -124,6 +124,14 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
     return fresh;
   }
 
+  // Bulk-load users by id — pass-through to `Users.loadByIds` for surfaces
+  // that have a set of user ids and need to render name / email / avatar
+  // (activity feeds, leaderboards, comparison strips). `options.select`
+  // narrows the projection.
+  async function loadByIds(ids, options = {}) {
+    return Users.loadByIds(ids, options);
+  }
+
   return {
     profile,
     loadProfile,
@@ -136,5 +144,6 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
     avatarUrl,
     uploadAvatar,
     updateUser,
+    loadByIds,
   };
 });

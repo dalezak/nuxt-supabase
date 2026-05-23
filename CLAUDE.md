@@ -108,7 +108,21 @@ The layer ships reusable boilerplate under `supabase/functions/_shared/`. Apps c
 - `claude.ts` — `callClaude({ model, system, user, max_tokens, thinking, effort })` returns `{ text, raw, truncated }`. Default model is `claude-opus-4-7`; callers override per task. `parseJSON(text)` strips ```json fences and parses.
 - `edge.ts` — `serveEdge(handler)` wraps `Deno.serve` with CORS preflight + try/catch. `verifyAuth(req)` returns `{ ok, user, supabaseAdmin, supabaseUser }` or `{ ok: false, response }` — the latter is a ready-to-return 401. `jsonResponse(data, status)` and `errorResponse(message, status)` build CORS-aware responses.
 
-Apps keep their own prompts and parsing logic in their own `_shared/prompts.ts` (or similar) — the layer only provides the SDK plumbing. Typical edge function shape:
+Apps keep their own prompts and parsing logic in their own `_shared/prompts.ts` (or similar) — the layer only provides the SDK plumbing.
+
+#### Scheduling cron-driven Edge Functions
+
+Any Edge Function meant to run on a fixed cadence (push dispatchers, reconciliation jobs, periodic cleanups) is scheduled via the `schedule_edge_function(name, cadence, function_name)` SQL helper shipped with this layer. One-liner per schedule:
+
+```sql
+select public.schedule_edge_function('notify-streaks',     '0 19 * * *',   'notify-streaks');
+select public.schedule_edge_function('notify-dormant',     '0 17 * * *',   'notify-dormant');
+select public.schedule_edge_function('notify-reminders',   '*/5 * * * *',  'notify-reminders');
+```
+
+The helper auto-installs `pg_cron` + `pg_net` when available (hosted Supabase) and skips gracefully on local dev. Replaces the ~20-line `do $$ if pg_cron available then create extension + cron.schedule(...) end $$` boilerplate.
+
+Typical edge function shape:
 
 ```ts
 import { callClaude, parseJSON } from "../_shared/claude.ts";
@@ -175,7 +189,7 @@ When uncertain, ask: "Would another app extending this layer want this?" If yes,
   - `insertModel(table, values)` — static, inserts without returning the row; throws on error
   - `upsertModel(table, values, onConflict)` — static, upserts with explicit conflict columns e.g. `'user_id,question_id'`; throws on error
 - **SupaModels helpers**:
-  - `loadModels(collectionClass, modelClass, table, { select, limit, offset, where, order })` — paginated query; `where` is `[[column, operator, value], ...]`; supported operators: `eq neq gt lt gte lte ilike like is in cs cd`; `ilike`/`like` auto-wrap value in `%`
+  - `loadModels(collectionClass, modelClass, table, { select, limit, offset, where, order })` — paginated query; `where` is `[[column, operator, value], ...]`; supported operators: `eq neq gt lt gte lte ilike like is in cs cd`; `ilike`/`like` auto-wrap value in `%`. Prefix any operator with `not_` to negate, e.g. `['pillar_id', 'not_is', null]` → `.not('pillar_id', 'is', null)`
   - `deleteModels(table, where)` — bulk delete matching where clauses; throws on error
   - `countModels(table, where)` — returns exact row count matching where clauses; returns 0 on error
 - **Collection pattern**: Subclass `SupaModels` with `constructor(modelClass, models)` calling `super(modelClass, models)`. Pass both args through.
@@ -289,6 +303,173 @@ export default class Courses extends SupaModels {
   }
 }
 ```
+
+## Read-side data access: priority order
+
+When you need to query or aggregate data, reach for these in order. Only
+escalate when the prior tier genuinely doesn't fit. Lower tiers compose
+with each other; higher tiers are reserved for cases the lower ones can't
+express.
+
+### Why the order matters
+
+Extensions to this layer ripple across **every consuming app immediately**,
+and every future app inherits them without effort. Prefer extending the
+base over solving the same problem app-side: a 10-line change to
+`SupaModels` benefits N apps × indefinite time, while the same change
+made app-side benefits 1 app × until-the-pattern-is-forgotten.
+
+### 1. Reuse existing `SupaModel` / `SupaModels` methods
+
+Before writing any new query, check whether a base method already covers
+the shape:
+
+| Need | Method |
+| --- | --- |
+| One row by id | `SupaModel.loadModel(class, table, { id })` |
+| Maybe-one row by filter | `SupaModel.findModel(class, table, where, { select, or })` |
+| Paginated list with filter / order | `SupaModels.loadModels(class, model, table, { where, order, limit, offset, select, or, transform })` |
+| Single insert | `SupaModel.insertModel(table, values)` |
+| Single update by where | `SupaModel.updateModel(table, where, values)` |
+| Upsert | `SupaModel.upsertModel(table, values, onConflict)` |
+| Save (auto-detects insert/upsert by `this.id`) | `instance.saveModel(class, table, attributes, keys)` |
+| Single delete by where | `instance.deleteModel(class, table, where)` |
+| Bulk delete by where | `SupaModels.deleteModels(table, where)` |
+
+`loadModels` accepts arbitrary `select` strings (including PostgREST FK
+shorthand like `inviter:users!inviter_id(id, name)`) and a flexible
+`where` triple array supporting the full Supabase operator surface — eq,
+neq, gt/gte/lt/lte, like/ilike, is, in, **contains, containedBy,
+overlaps**, not, textSearch, rangeGt/Lt/Adjacent. Drop to raw
+`client.from()` only when no operator combination expresses the query.
+
+### 2. Reuse count primitives — don't fetch-to-count
+
+`SupaModels.countModels(table, where)` exists. It runs
+`.select('id', { count: 'exact', head: true })` — server returns just
+the integer, no rows.
+
+**Anti-pattern**:
+
+```js
+const rows = await loadXxx(...);
+state.fooCount = rows.length;  // fetched N rows just to read .length
+```
+
+**Use instead**:
+
+```js
+state.fooCount = await Foo.countSomething(...);  // wraps countModels
+```
+
+Pattern applies to any "show N of foo" surface — digest cards, stat
+strips, profile counts. If your `countXxxForY` method doesn't exist yet,
+add it to the model (one-line delegate to `countModels`).
+
+### 3. Extend `SupaModel` / `SupaModels` when patterns recur
+
+This is the highest-leverage tier — extensions to the base layer ripple
+across every consuming app immediately, and every future app inherits
+them without effort. **Prefer extending the base over solving the same
+problem app-side.**
+
+The bar for adding a base method:
+
+- The pattern recurs across two or more apps, OR
+- It's a clean generalization that would have a clear name on the base, OR
+- It closes a parity gap between `SupaModel(s)` and the sibling pairs
+  (`RestModel` / `GraphModel`) where the concept generalizes
+
+Lower the bar when the change is mechanical (new operator already
+supported by the underlying SDK, new option on an existing method);
+raise it when it requires schema changes or new infrastructure.
+
+### 4. Views (and materialized views) for multi-table aggregation
+
+When the query shape requires joining multiple tables or computing
+aggregates that don't fit `loadModels` — or when caller-scoped reads
+need to bypass RLS on specific underlying tables — a Postgres view is
+the right primitive. Caller queries it like any other table via
+`loadModels(class, model, 'view_name', ...)`.
+
+Mark views `with (security_invoker = on)` so the caller's RLS scopes
+the underlying SELECTs. Use `security_invoker = off` (default) only when
+the view needs to read cross-user state under owner-only RLS — in that
+case, the view's WHERE clause must enforce scoping via `auth.uid()`.
+
+Promote to a **materialized view** when computation is expensive and
+N-minute staleness is acceptable. Wrap the matview in a regular view
+with `security_invoker = on` so the public surface stays consistent;
+refresh strategy (cron / trigger / app-driven) lives in the migration.
+
+Best fits: leaderboards, per-user stats rollups, partner activity
+feeds, lock-state-per-row, daily candidate pools.
+
+### 5. RPC (SQL function) only as a last resort
+
+Reserve for cases that genuinely don't fit a SELECT or a base method:
+
+- Writes with multi-step branching (validate code, check membership,
+  insert row — e.g. `join_group_by_code`)
+- Scheduled jobs called from edge functions or pg_cron
+- Stateful computations that read-and-write atomically
+
+**Don't reach for RPC just to consolidate round-trips** — that's what
+views are for. The N-RPC-fan-out from the client is the anti-pattern
+this hierarchy is meant to prevent.
+
+### Decision flow
+
+```text
+Need data?
+  ├─ Is it expressible via existing base methods?    →  Use them
+  ├─ Are you fetching just to count?                  →  countModels
+  ├─ Does the pattern recur and need a new helper?    →  Extend the base
+  ├─ Multi-table join / aggregation / row-derived?    →  View (or matview)
+  └─ Imperative write with branching?                 →  RPC
+```
+
+### Anti-patterns to avoid
+
+- **Raw `client.from(...)` in app or layer code** when a base method
+  fits — drops layer discipline and consistency
+- **`useSupabaseClient()` in page components** — pages should call
+  stores or composables, not the client directly
+- **Fetching rows then `.length`-ing them** when `countModels` answers
+  the same question in one round-trip
+- **RPC for round-trip consolidation** — views express it more
+  idiomatically without app-side `rpc()` ceremony
+- **Views without `security_invoker = on`** when the caller's RLS
+  should scope reads — silently leaks across users
+
+### Cross-backend parity
+
+The three model pairs share a common surface so callers can reach for the
+same primitive regardless of backend:
+
+| Method | SupaModel(s) | RestModel(s) | GraphModel(s) |
+| --- | --- | --- | --- |
+| `loadModel` | ✓ | ✓ | ✓ |
+| `findModel` | ✓ | ✓ | ✓ |
+| `insertModel` | ✓ | ✓ | ✓ |
+| `updateModel` | ✓ | ✓ | ✓ |
+| `upsertModel` | ✓ | — (no native REST verb) | ✓ |
+| `saveModel` | ✓ | ✓ | ✓ |
+| `deleteModel` | ✓ | ✓ | ✓ |
+| `loadModels` | ✓ | ✓ | ✓ |
+| `countModels` | ✓ | ✓ | ✓ |
+| `deleteModels` | ✓ | ✓ | ✓ |
+
+Signatures differ where the backends do. PostgREST takes `where` triples
+and SDK operators; REST takes URL + params; GraphQL takes URL + query/
+mutation strings + variables + an optional `dataKey`. The conceptual
+shape is the same — pick the primitive that matches your need, then
+supply the backend-specific args.
+
+REST `upsertModel` is intentionally omitted: HTTP has no native upsert
+verb, and the right shape depends on the endpoint's convention (PUT-as-
+upsert, POST with idempotency key, custom endpoint). Implement at the
+subclass level when the API contract is known.
 
 ## Local storage caching
 

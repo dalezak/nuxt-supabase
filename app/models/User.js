@@ -13,6 +13,8 @@ export default class User extends SupaModel {
   subscription_expires_at = null;
   subscription_platform = null;
 
+  onboarded_at = null;
+
   created_at = null;
   updated_at = null;
 

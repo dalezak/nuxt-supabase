@@ -30,7 +30,13 @@ export default class SupaModel extends Model {
   //   where   — plain object of AND equality conditions: { email: 'alice@example.com' }
   //   select  — Supabase select string, default '*'
   //   or      — Supabase OR filter string, e.g. 'user_id.eq.123,friend_id.eq.123'
-  static async findModel(modelClass, table, where = {}, { select = '*', or = null } = {}) {
+  //   order   — 'column:asc' or 'column:desc' to return the first row by that
+  //             ordering when multiple match (e.g. "latest rating per pillar").
+  //             When supplied, implicitly adds `.limit(1)` so a non-unique
+  //             where-clause returns the first ordered row instead of throwing
+  //             on multiple matches. Omit for unique-or-null lookups (the
+  //             original behavior — strict on >1 row).
+  static async findModel(modelClass, table, where = {}, { select = '*', or = null, order = null } = {}) {
     const Supabase = useSupabaseClient();
     let query = Supabase.from(table).select(select);
     for (let key of Object.keys(where)) {
@@ -39,6 +45,10 @@ export default class SupaModel extends Model {
     }
     if (or) {
       query = query.or(or);
+    }
+    if (order) {
+      const [column, direction] = order.split(':');
+      query = query.order(column, { ascending: direction === 'asc' }).limit(1);
     }
     let { data: row, error } = await query.maybeSingle();
     if (error) {
@@ -53,11 +63,23 @@ export default class SupaModel extends Model {
   }
 
   // Inserts a new row into table with the given values.
-  // Does not return the inserted row (avoids triggering a separate RLS select).
+  // By default does not return the inserted row (avoids triggering a
+  // separate RLS select). Pass `{ returning: true }` to get the inserted
+  // row back via `.select().single()` — useful when the caller needs the
+  // db-assigned id / defaults (e.g. lazily-created daily challenges).
   // Throws on error.
-  static async insertModel(table, values) {
+  static async insertModel(table, values, { returning = false } = {}) {
     const Supabase = useSupabaseClient();
-    const { error } = await Supabase.from(table).insert(values);
+    let query = Supabase.from(table).insert(values);
+    if (returning) {
+      const { data, error } = await query.select().single();
+      if (error) {
+        consoleError("SupaModel.insertModel", table, error);
+        throw error;
+      }
+      return data;
+    }
+    const { error } = await query;
     if (error) {
       consoleError("SupaModel.insertModel", table, error);
       throw error;
@@ -85,13 +107,32 @@ export default class SupaModel extends Model {
     return data;
   }
 
-  // Upserts a row into table. onConflict is a comma-separated string of
+  // Upserts a row into table. `onConflict` is a comma-separated string of
   // conflict columns, e.g. 'user_id,question_id'.
-  // ignoreDuplicates — if true, do nothing on conflict (don't overwrite existing row).
-  // Does not return the upserted row. Throws on error.
-  static async upsertModel(table, values, onConflict, ignoreDuplicates = false) {
+  //
+  // `options` accepts either:
+  //   - a boolean `ignoreDuplicates` (legacy positional shortcut), OR
+  //   - an object `{ ignoreDuplicates, returning }`
+  //     - `ignoreDuplicates` — do nothing on conflict (don't overwrite)
+  //     - `returning` — fetch the upserted row back via .select().single()
+  //
+  // Without `returning`, returns nothing (avoids a separate RLS select).
+  // Throws on error in either mode.
+  static async upsertModel(table, values, onConflict, options = false) {
+    const { ignoreDuplicates = false, returning = false } = typeof options === 'boolean'
+      ? { ignoreDuplicates: options }
+      : options;
     const Supabase = useSupabaseClient();
-    const { error } = await Supabase.from(table).upsert(values, { onConflict, ignoreDuplicates });
+    let query = Supabase.from(table).upsert(values, { onConflict, ignoreDuplicates });
+    if (returning) {
+      const { data, error } = await query.select().single();
+      if (error) {
+        consoleError("SupaModel.upsertModel", table, error);
+        throw error;
+      }
+      return data;
+    }
+    const { error } = await query;
     if (error) {
       consoleError("SupaModel.upsertModel", table, error);
       throw error;

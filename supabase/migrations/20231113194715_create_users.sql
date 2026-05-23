@@ -3,6 +3,7 @@ create table "public"."users" (
     "email" character varying not null,
     "name" character varying not null,
     "avatar_url" text,
+    "onboarded_at" timestamp without time zone,
     "created_at" timestamp without time zone default now(),
     "updated_at" timestamp without time zone default now()
 );

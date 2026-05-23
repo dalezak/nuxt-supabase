@@ -6,7 +6,7 @@ function makeBuilder(result) {
   const b = {}
   for (const method of [
     'select', 'range', 'eq', 'neq', 'gt', 'lt', 'gte', 'lte',
-    'ilike', 'like', 'is', 'in', 'cs', 'cd', 'order',
+    'ilike', 'like', 'is', 'in', 'cs', 'cd', 'not', 'order',
     'upsert', 'insert', 'delete', 'single',
   ]) {
     b[method] = vi.fn().mockReturnValue(b)
@@ -90,6 +90,20 @@ describe('SupaModels.loadModels()', () => {
       })
       expect(builder.eq).toHaveBeenCalledWith('name', 'Alice')
       expect(builder.neq).toHaveBeenCalledWith('id', '99')
+    })
+
+    it('applies not_<op> as negated operator', async () => {
+      await SupaModels.loadModels(TestCollection, TestModel, 'tests', {
+        where: [['pillar_id', 'not_is', null]],
+      })
+      expect(builder.not).toHaveBeenCalledWith('pillar_id', 'is', null)
+    })
+
+    it('auto-wraps % on not_ilike like the direct ilike variant', async () => {
+      await SupaModels.loadModels(TestCollection, TestModel, 'tests', {
+        where: [['title', 'not_ilike', 'draft']],
+      })
+      expect(builder.not).toHaveBeenCalledWith('title', 'ilike', '%draft%')
     })
   })
 

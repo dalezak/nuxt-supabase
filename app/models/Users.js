@@ -38,4 +38,18 @@ export default class Users extends SupaModels {
     });
   }
 
+  // Bulk-load users by id — used by activity-feed hydration and other
+  // surfaces that have a list of user ids and need name/email/avatar.
+  // Pass `select` to narrow the projection when only a few columns are
+  // needed (e.g. `'id, name, avatar_url'`). Returns an empty Users
+  // collection on an empty input (no round-trip).
+  static async loadByIds(ids, { select = "*" } = {}) {
+    if (!ids?.length) return new Users();
+    return this.loadModels(Users, User, "users", {
+      select,
+      where: [["id", "in", ids]],
+      limit: ids.length,
+    });
+  }
+
 }
