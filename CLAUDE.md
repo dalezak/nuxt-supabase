@@ -632,7 +632,7 @@ Push subscriptions (per-device endpoints), per-user notification settings (enabl
 
 ### Subscriptions (billing) — moved to `nuxt-plans`
 
-The `revenuecat` Edge Function, `usePlan()` composable, and `subscription_status` column convention all live in [`nuxt-plans`](../nuxt-plans/CLAUDE.md). Apps that need paid plans extend that layer.
+The `revenuecat` Edge Function, `usePlan()` composable, and the `subscription_status` columns on `users` (shipped as a migration extending the base layer's `users` table) all live in [`nuxt-plans`](../nuxt-plans/CLAUDE.md). Apps that need paid plans extend that layer and get the columns automatically.
 
 ### Activity formatting (`useActivityFormat`)
 

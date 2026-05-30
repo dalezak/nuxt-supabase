@@ -9,6 +9,8 @@
     "build": "nuxt build",
     "clean": "npx nuxi cleanup",
     "dev": "nuxt dev",
+    "stop": "supabase stop",
+    "start": "supabase start",
     "local": "nuxt dev --dotenv .env.local",
     "prod": "nuxt dev --dotenv .env.prod",
     "generate": "nuxt generate",
