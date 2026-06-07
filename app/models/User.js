@@ -13,6 +13,11 @@ export default class User extends SupaModel {
   subscription_expires_at = null;
   subscription_platform = null;
 
+  // Per-user settings blob (account-scoped). Keys are app-defined (the app
+  // declares its toggles in app.config `settings`); patch one key at a time
+  // via setSetting() so toggles don't clobber the whole object.
+  settings = {};
+
   onboarded_at = null;
 
   created_at = null;
@@ -48,7 +53,7 @@ export default class User extends SupaModel {
 
   // Patch any subset of a user's columns by id. The layer's User class
   // intentionally doesn't list every app-extended field (study goals,
-  // notification preferences, etc.); this method lets app stores update
+  // notification settings, etc.); this method lets app stores update
   // those without needing a User instance or subclass. Returns the fresh
   // row, or null on error.
   static async update(userId, patch) {
@@ -60,6 +65,20 @@ export default class User extends SupaModel {
       consoleError('User.update', userId, error);
       return null;
     }
+  }
+
+  // Atomically merge a single setting key into the caller's settings
+  // blob via the set_user_setting() RPC — a partial jsonb merge so two
+  // toggles in quick succession don't clobber each other. Returns true on
+  // success. `value` is anything JSON-serializable (bool/string/number).
+  static async setSetting(key, value) {
+    const Supabase = useSupabaseClient();
+    const { error } = await Supabase.rpc('set_user_setting', { p_key: key, p_value: value });
+    if (error) {
+      consoleError('User.setSetting', key, error);
+      return false;
+    }
+    return true;
   }
 
   // Returns the best available avatar URL: uploaded photo, then Gravatar, then null.

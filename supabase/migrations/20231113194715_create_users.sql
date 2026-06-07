@@ -4,6 +4,11 @@ create table "public"."users" (
     "name" character varying not null,
     "avatar_url" text,
     "onboarded_at" timestamp without time zone,
+    -- Per-user settings blob (account-scoped, synced across devices). Each
+    -- app declares its own toggles in app.config `settings`; this stores
+    -- whatever keys they set (dark_mode, push_*, etc.). Patched one key at a
+    -- time via set_user_setting() so concurrent toggles don't clobber.
+    "settings" jsonb not null default '{}',
     "created_at" timestamp without time zone default now(),
     "updated_at" timestamp without time zone default now()
 );
@@ -59,4 +64,32 @@ using ((auth.uid() = id))
 with check ((auth.uid() = id));
 
 
+-- Atomically patch ONE setting key for the calling user. `settings ||
+-- {key:value}` merges a single key rather than overwriting the whole blob,
+-- so two settings toggled in quick succession can't clobber each other.
+-- security invoker (default) + `where id = auth.uid()` means a caller can
+-- only ever write their own row, gated by the update policy above.
+create or replace function public.set_user_setting(p_key text, p_value jsonb)
+returns void
+language sql
+as $$
+  update public.users
+  set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object(p_key, p_value),
+      updated_at = now()
+  where id = auth.uid();
+$$;
 
+grant execute on function public.set_user_setting(text, jsonb) to authenticated;
+
+
+
+
+
+-- Keep `updated_at` current on every row change. Postgres does not do this
+-- automatically (the column default fires only on INSERT); moddatetime is the
+-- standard Supabase extension that bumps it on UPDATE.
+create extension if not exists moddatetime schema extensions;
+
+create trigger users_set_updated_at
+    before update on public.users
+    for each row execute procedure moddatetime('updated_at');

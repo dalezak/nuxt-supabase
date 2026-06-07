@@ -132,6 +132,18 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
     return Users.loadByIds(ids, options);
   }
 
+  // Atomically merge a single setting key (set_user_setting RPC), then
+  // mirror it onto the in-memory profile + refresh the local-storage cache —
+  // otherwise loadProfile would restore the pre-toggle row on next load.
+  async function setSetting(key, value) {
+    const ok = await User.setSetting(key, value);
+    if (ok && profile.value) {
+      profile.value.settings = { ...(profile.value.settings ?? {}), [key]: value };
+      await profile.value.store();
+    }
+    return ok;
+  }
+
   return {
     profile,
     loadProfile,
@@ -145,5 +157,6 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
     uploadAvatar,
     updateUser,
     loadByIds,
+    setSetting,
   };
 });
