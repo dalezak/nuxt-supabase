@@ -2,8 +2,60 @@ import Model from './Model';
 
 export default class SupaModel extends Model {
 
+  // Opt-in local-storage caching. When true, the store's loadItem() restores
+  // this model from cache first (pull-to-refresh / refresh:true busts it).
+  // Set on stable reference/content models (lessons, modules); user-volatile
+  // models leave it false so they always load fresh. Pairs with a `cacheKey`
+  // override (below) so loadItem() has a key to restore/store under.
+  static cacheable = false;
+
   constructor(data = {}) {
     super(data);
+  }
+
+  // Local-storage cache key for a single record, e.g. `lessons/${id}`.
+  // Override in cacheable models — one source of truth that powers the
+  // generic store() / restore() / evict() / stale() below, so a model
+  // opts into caching by defining just this. Returns null (uncacheable)
+  // by default. Models with a bespoke/composite key may instead override
+  // store()/restore() directly (those win over the generic path here).
+  static cacheKey(id) {
+    return null;
+  }
+
+  // Generic cache ops derived from cacheKey — a model that defines cacheKey
+  // gets all three without re-implementing them. No-ops when cacheKey is null.
+  async store() {
+    const key = this.constructor.cacheKey(this.id);
+    return key ? this.storeModel(key) : null;
+  }
+
+  static async restore(id) {
+    const key = this.cacheKey(id);
+    return key ? this.restoreModel(this, key) : null;
+  }
+
+  static async evict(id) {
+    const key = this.cacheKey(id);
+    if (key) await useStorage().remove(key);
+  }
+
+  // Freshness check for a cached record against the server's marker value for
+  // `id` — typically a timestamp (updated_at / recreated_at) fetched cheaply
+  // in bulk for a list, then reconciled per row. Returns true when our cached
+  // copy is present but its `field` differs (stale) and, by default, evicts it
+  // so the next load re-fetches; false when nothing is cached or it matches.
+  // Reusable by any cacheable model — the basis for stale-while-revalidate so
+  // shared users pick up an owner's edit without a heavy fetch every visit.
+  //   Lesson.stale(id, serverUpdatedAt)            // default field: updated_at
+  //   Foo.stale(id, marker, { field: 'version' })  // override per model
+  static async stale(id, marker, { field = 'updated_at', evict = true } = {}) {
+    if (!id) return false;
+    const cached = await this.restore(id);
+    if (!cached) return false;
+    if ((cached[field] ?? null) === (marker ?? null)) return false;
+    if (evict) await this.evict(id);
+    return true;
   }
 
   // Override in subclasses to load a single record from Supabase by id.
