@@ -18,7 +18,13 @@ export function createSupaStore(name, ModelClass, CollectionClass, extend = () =
     // marker to the one we stored at cache time — re-fetching + hot-swapping
     // only when it changed. Needs trustworthy `updated_at` (moddatetime
     // triggers). No-op for collections that don't opt in.
-    const swrMarkerKey = () => `${name}/_swr_marker`;
+    //
+    // The marker key lives under its own `_swr/` namespace, NOT under the
+    // collection's `${name}/` prefix — otherwise the collection cache's
+    // prefix scan (Models.restoreModels / storedModels) would hydrate it as a
+    // junk record and inflate the count. It needs no manifest eviction: it's
+    // self-maintaining (rewritten on each markFresh / revalidate).
+    const swrMarkerKey = () => `_swr/${name}`;
 
     // Record the current freshness marker after a server load, so the next
     // cold load can tell whether the catalog has moved on.

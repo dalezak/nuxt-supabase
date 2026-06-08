@@ -16,6 +16,21 @@ const FETCH_TIMEOUT_MS = 2500;
 
 export function useCacheManifest() {
   const storage = useStorage();
+  // App/layer-declared coupling: extra cache prefixes to evict when a given
+  // table moves (caches keyed outside the `<table>/` convention, e.g. a
+  // denormalized bundle). Deep-merged across layers — see app.config.
+  const derivedPrefixes = useAppConfig().cacheManifest?.derivedPrefixes ?? {};
+
+  // Evict a stale table's own `<table>/` prefix plus any derived prefixes it
+  // feeds (e.g. `lessons` → `course-modules/`), so bundle caches built from a
+  // table stay in lockstep with it without a per-visit freshness check.
+  async function evictForTable(table) {
+    await storage.clear(`${table}/`);
+    for (const prefix of derivedPrefixes[table] ?? []) {
+      consoleLog('cache-manifest', `evicting derived cache: ${prefix} (via ${table})`);
+      await storage.clear(prefix);
+    }
+  }
 
   async function revalidate() {
     let rows = null;
@@ -42,7 +57,7 @@ export function useCacheManifest() {
       // just records it — nothing is cached yet to evict.)
       if (prev && (prev.updated_at !== fp.updated_at || prev.row_count !== fp.row_count)) {
         consoleLog('cache-manifest', `evicting stale cache: ${table}`);
-        await storage.clear(`${table}/`);
+        await evictForTable(table);
       }
       next[table] = fp;
     }
@@ -60,7 +75,7 @@ export function useCacheManifest() {
     consoleLog('cache-manifest', `TTL backstop: clearing caches (offline > ${TTL_DAYS}d)`);
     for (const table of Object.keys(stored)) {
       if (table === '_checkedAt') continue;
-      await storage.clear(`${table}/`);
+      await evictForTable(table);
     }
     await storage.remove(FINGERPRINT_KEY);
   }
