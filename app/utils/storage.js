@@ -103,11 +103,23 @@ export class Storage {
 
   _matches(item, search, haystack) {
     if (!search || search.length === 0) return true;
+    // Fields to search. With an explicit `haystack` we scan only those columns
+    // (the norm — every app collection passes one, e.g. 'title,subtitle').
+    // WITHOUT a haystack we fall back to EVERY field, which substring-matches
+    // ids / timestamps / urls too and yields false positives — so always pass a
+    // haystack when filtering a cache.
     const attributes = haystack && haystack.length > 0 ? haystack.split(",") : null;
     const values = attributes ? attributes.map(attr => item[attr]) : Object.values(item);
     for (let value of values) {
-      if (value && Array.isArray(value) && value.includes(search)) return true;
-      if (value && value.toString().toLowerCase().indexOf(search) !== -1) return true;
+      if (value == null) continue;
+      // Arrays (text[] columns, e.g. tags/topics) match if any ELEMENT contains
+      // the term — substring, consistent with the scalar branch below (was an
+      // exact whole-element match, an inconsistency).
+      if (Array.isArray(value)) {
+        if (value.some(v => v != null && v.toString().toLowerCase().includes(search))) return true;
+      } else if (value.toString().toLowerCase().includes(search)) {
+        return true;
+      }
     }
     return false;
   }
@@ -131,13 +143,21 @@ export class Storage {
       property = property.slice(1);
     }
     return (a, b) => {
-      if (typeof a[property] === "boolean") {
-        return ((a[property] === b[property]) ? 0 : a[property] ? -1 : 1) * sortOrder;
+      const av = a[property];
+      const bv = b[property];
+      // Null/undefined sort LAST, regardless of direction — so a row missing the
+      // sort field (e.g. a null `position`) lands in a stable, predictable spot
+      // instead of comparing equal-to-everything and scattering.
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === "boolean") {
+        return ((av === bv) ? 0 : av ? -1 : 1) * sortOrder;
       }
-      if (typeof a[property] === "number") {
-        return (a[property] - b[property]) * sortOrder;
+      if (typeof av === "number") {
+        return (av - bv) * sortOrder;
       }
-      return ((a[property] < b[property]) ? -1 : (a[property] > b[property])) * sortOrder;
+      return ((av < bv) ? -1 : (av > bv) ? 1 : 0) * sortOrder;
     };
   }
 

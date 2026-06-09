@@ -26,6 +26,10 @@ export function useCacheManifest() {
   // table stay in lockstep with it without a per-visit freshness check.
   async function evictForTable(table) {
     await storage.clear(`${table}/`);
+    // Also drop the matching collection store's IN-MEMORY cache (table name ===
+    // store id) so a pre-eviction restore can't keep serving stale data from
+    // the memory short-circuit. No-op if that store wasn't instantiated yet.
+    resetCacheableStore(table);
     for (const prefix of derivedPrefixes[table] ?? []) {
       consoleLog('cache-manifest', `evicting derived cache: ${prefix} (via ${table})`);
       await storage.clear(prefix);
@@ -45,7 +49,15 @@ export function useCacheManifest() {
       return;
     }
 
-    const stored = (await storage.get(FINGERPRINT_KEY)) ?? {};
+    const storedBlob = await storage.get(FINGERPRINT_KEY);
+    // First-ever manifest run: either a fresh install (nothing cached — evicting
+    // is a harmless no-op) OR an upgrade from a version that predates this
+    // feature, whose caches were written WITHOUT fingerprint tracking and so
+    // can't be trusted. Either way, evict every manifest table once on the first
+    // run, then refetch under tracking from here on. Runs at launch before any
+    // navigation, so no cache written this session is lost.
+    const firstRun = !storedBlob;
+    const stored = storedBlob ?? {};
     const next = { _checkedAt: new Date().toISOString() };
 
     for (const row of rows ?? []) {
@@ -53,10 +65,19 @@ export function useCacheManifest() {
       if (!table) continue;
       const fp = { updated_at: row.updated_at ?? null, row_count: row.row_count ?? null };
       const prev = stored[table];
-      // Stale only if we HAD a fingerprint and either field moved. (First run
-      // just records it — nothing is cached yet to evict.)
-      if (prev && (prev.updated_at !== fp.updated_at || prev.row_count !== fp.row_count)) {
-        consoleLog('cache-manifest', `evicting stale cache: ${table}`);
+      // Evict on the first run (clear any untracked pre-manifest cache) or when
+      // a tracked fingerprint moved — `updated_at` bump = insert/update,
+      // `row_count` drop = delete.
+      //
+      // ASSUMPTION (blind spot): the `count + max(updated_at)` fingerprint can
+      // miss a HARD-DELETE of a non-newest row that's masked by a same-count
+      // insert/edit not raising the max (count nets to 0, max unchanged). Fine
+      // for these tables — they're seed-managed reference content (append/edit,
+      // hard-deletes rare and seed-time). If a table starts taking concurrent
+      // hard-deletes, add a stronger signal to the view (e.g. an id+updated_at
+      // hash) instead of count+max.
+      if (firstRun || (prev && (prev.updated_at !== fp.updated_at || prev.row_count !== fp.row_count))) {
+        consoleLog('cache-manifest', `evicting ${firstRun ? 'pre-manifest' : 'stale'} cache: ${table}`);
         await evictForTable(table);
       }
       next[table] = fp;

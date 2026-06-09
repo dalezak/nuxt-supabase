@@ -11,89 +11,80 @@ export function createSupaStore(name, ModelClass, CollectionClass, extend = () =
       return item.value;
     });
 
-    // Stale-while-revalidate (opt-in). A collection opts in with
-    // `static swr = true` + a `static async marker(params)` that returns a
-    // cheap freshness token (e.g. `count:maxUpdatedAt`). loadItems then returns
-    // the cached list instantly and, in the background, compares the server's
-    // marker to the one we stored at cache time — re-fetching + hot-swapping
-    // only when it changed. Needs trustworthy `updated_at` (moddatetime
-    // triggers). No-op for collections that don't opt in.
-    //
-    // The marker key lives under its own `_swr/` namespace, NOT under the
-    // collection's `${name}/` prefix — otherwise the collection cache's
-    // prefix scan (Models.restoreModels / storedModels) would hydrate it as a
-    // junk record and inflate the count. It needs no manifest eviction: it's
-    // self-maintaining (rewritten on each markFresh / revalidate).
-    const swrMarkerKey = () => `_swr/${name}`;
+    // Per-collection stale-while-revalidate was removed 2026-06-08 — it had no
+    // opt-in callers left (the last, Courses, dropped `static swr` on 06-07) and
+    // the cache_manifest now owns launch-time freshness (it checks the same
+    // count + max(updated_at) signal and evicts the stale `<table>/` prefix).
+    // Re-introduce only for a collection that genuinely changes *within* a
+    // session — the manifest only revalidates at launch.
 
-    // Record the current freshness marker after a server load, so the next
-    // cold load can tell whether the catalog has moved on.
-    async function markFresh(params) {
-      try {
-        const marker = await CollectionClass.marker(params);
-        if (marker != null) await useStorage().set(swrMarkerKey(), marker);
-      } catch (error) {
-        consoleLog(`${name} SWR markFresh skipped`, error);
-      }
-    }
-
-    // Background freshness check. Best-effort: any failure leaves the cached
-    // list in place (we already returned it).
-    async function revalidate(limit, params) {
-      try {
-        const Storage = useStorage();
-        const [serverMarker, cachedMarker] = await Promise.all([
-          CollectionClass.marker(params),
-          Storage.get(swrMarkerKey()),
-        ]);
-        if (serverMarker == null) return;
-        if (cachedMarker == null) { await Storage.set(swrMarkerKey(), serverMarker); return; }
-        if (serverMarker === cachedMarker) return;
-        consoleLog(`${name} SWR stale (server=${serverMarker} cached=${cachedMarker}) — revalidating`);
-        const reloaded = await CollectionClass.load(limit, 0, null, params);
-        if (reloaded) {
-          await reloaded.store();
-          await Storage.set(swrMarkerKey(), serverMarker);
-          items.value = reloaded; // reactive hot-swap — the list updates in place
-        }
-      } catch (error) {
-        consoleLog(`${name} SWR revalidate skipped`, error);
-      }
-    }
-
+    // `limit` contract: this default (10) OVERRIDES a model's own load()
+    // default, because loadItems always forwards `limit` explicitly. A surface
+    // that caches a full reference collection (books, quotes, courses, badges)
+    // MUST pass an explicit `limit` covering the whole set — otherwise it
+    // fetches only 10, store()s them, and next launch stored()→10 makes that
+    // slice look like the complete cached catalog. Paginated surfaces pass
+    // their page size; full-catalog surfaces pass the cap.
     async function loadItems({ limit = 10, offset = 0, search = null, refresh = false, params = {} } = {}) {
       consoleLog(`[${name}] loadItems called (refresh=${refresh}, offset=${offset}, items=${items.value?.length ?? 'null'})`);
       try {
-        // Memory cache. Skipped when searching — this shortcut isn't search-
-        // aware (the stored/restore path below is), so honoring it for a search
-        // would hand back the previous, unfiltered set.
-        if (!refresh && !search && offset === 0 && items.value != null && items.value.length <= limit) {
+        // `params` present = a filtered query the generic `<table>/{id}` cache
+        // can't represent (it's neither search- nor params-aware). Treat it like
+        // `search`: bypass the memory shortcut AND the stored/restore path, load
+        // fresh, and don't store() the filtered subset (which would pollute the
+        // shared cache and masquerade as the full set on a later unfiltered
+        // read). No current collection passes params — this keeps the generic
+        // cache safe for the next one that does.
+        const hasParams = params != null && Object.keys(params).length > 0;
+        // Memory cache. Skipped when searching/filtering — this shortcut isn't
+        // search- or params-aware (the stored/restore path below handles
+        // search), so honoring it would hand back the previous, differently-
+        // filtered set.
+        if (!refresh && !search && !hasParams && offset === 0 && items.value != null && items.value.length <= limit) {
           consoleLog(`${name} loadItems memory cache (${items.value.length} items)`);
           return items.value;
         }
-        let loaded = null;
-        const storedCount = !refresh && offset === 0 ? await CollectionClass.stored(search, params) : 0;
-        if (storedCount > 0) {
-          consoleLog(`${name} loadItems local storage (${storedCount} cached)`);
-          loaded = await CollectionClass.restore(limit, offset, search, params);
+        // Single cache scan: restore() returns the cached page directly, so its
+        // length IS the hit signal — no separate stored() count pass (that was a
+        // second full prefix scan over the same keys per cache hit). restore() is
+        // null (base, uncacheable) or empty (cold) → fall through to a DB load +
+        // store(). Only at offset 0 / no-refresh / no-params, matching the old
+        // cache gate. (Collections keep stored() as a contract helper; loadItems
+        // just no longer needs it.)
+        const tryCache = !refresh && !hasParams && offset === 0;
+        let loaded = tryCache ? await CollectionClass.restore(limit, offset, search, params) : null;
+        if (loaded && loaded.length > 0) {
+          consoleLog(`${name} loadItems local storage (${loaded.length} cached)`);
         } else {
           consoleLog(`${name} loadItems supabase fetch (refresh=${refresh}, offset=${offset})`);
           loaded = await CollectionClass.load(limit, offset, search, params);
-          if (loaded) {
-            await loaded.store();
-            if (CollectionClass.swr && offset === 0 && !search) await markFresh(params);
+          if (loaded && !hasParams) {
+            // (table name === store id === cache prefix `<name>/`.)
+            try {
+              // On a full refresh (pull-to-refresh, page 0), CLEAR the prefix
+              // before re-storing so it's a RECONCILE, not an upsert of the
+              // current page: a row deleted server-side otherwise leaves a stale
+              // `<name>/<id>` key that a later restore() would resurrect. Deeper
+              // pages are never cache-restored (the restore gate is offset === 0),
+              // so clearing the stale tail here is harmless.
+              if (refresh && offset === 0) await useStorage().clear(`${name}/`);
+              await loaded.store();
+            } catch (storeError) {
+              // A partial cache write (Models.store() throws mid-loop on IDB quota
+              // / txn failure) must NOT be left as a trusted partial — a later
+              // restore() would serve the incomplete set as the whole catalog.
+              // Clear the prefix so the cache is empty (re-fetched next load), and
+              // carry on with the freshly-loaded in-memory data so this load still
+              // succeeds.
+              consoleWarn(`${name} cache store failed — clearing ${name}/ to avoid a trusted partial`, storeError);
+              try { await useStorage().clear(`${name}/`); } catch (_) { /* best-effort */ }
+            }
           }
         }
         if (offset > 0) {
           if (loaded) items.value = [...(items.value ?? []), ...loaded];
         } else {
           items.value = loaded;
-        }
-        // We served from cache — kick off a background freshness check. Fire-
-        // and-forget so the caller keeps the instant cache; swap happens later
-        // if the server moved on. Only on the full first page, never searches.
-        if (CollectionClass.swr && storedCount > 0 && offset === 0 && !search) {
-          revalidate(limit, params);
         }
         return loaded;
       } catch (error) {
@@ -148,6 +139,16 @@ export function createSupaStore(name, ModelClass, CollectionClass, extend = () =
       } catch (error) {
         return Promise.reject(error);
       }
+    }
+
+    // Let the cache_manifest drop this collection's in-memory cache when it
+    // evicts the `<name>/` prefix at launch (table name === store id). Without
+    // this, a store that restored stale IndexedDB into `items` before the
+    // non-blocking manifest pass cleared the prefix would keep serving it from
+    // the memory short-circuit. No-op until the manifest actually evicts this
+    // table. Client-only — the manifest never runs on the server.
+    if (import.meta.client) {
+      registerCacheableStore(name, () => { items.value = null; });
     }
 
     return {
