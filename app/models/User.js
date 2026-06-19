@@ -185,7 +185,11 @@ export default class User extends SupaModel {
     const Supabase = useSupabaseClient();
     const { data: auth, error } = await Supabase.auth.signUp({
       email: email,
-      password: password
+      password: password,
+      // Carried into raw_user_meta_data so the `signup_user` DB trigger can
+      // populate public.users.name server-side (the profile row is no longer
+      // created client-side — see the trigger migration).
+      options: { data: { name } }
     });
     if (error) {
       consoleError("User.signup", error);

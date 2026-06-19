@@ -4,9 +4,9 @@
 -- net.http_post(url := ... + '/functions/v1/<fn>', headers := ..., body :=
 -- ...)) end $$` boilerplate with a single one-liner per schedule:
 --
---   select public.schedule_edge_function('notify-streaks', '0 19 * * *', 'notify-streaks');
---   select public.schedule_edge_function('notify-dormant', '0 17 * * *', 'notify-dormant');
---   select public.schedule_edge_function('notify-reminders', '*/5 * * * *', 'notify-reminders');
+--   select public.schedule_edge_function('notify-streak-reminders', '0 19 * * *', 'notify-streak-reminders');
+--   select public.schedule_edge_function('notify-dormant-courses', '0 17 * * *', 'notify-dormant-courses');
+--   select public.schedule_edge_function('notify-course-reminders', '*/5 * * * *', 'notify-course-reminders');
 --
 -- Args:
 --   p_name      — cron job name (must be unique within `cron.job`)

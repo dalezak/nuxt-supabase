@@ -92,4 +92,4 @@ create extension if not exists moddatetime schema extensions;
 
 create trigger users_set_updated_at
     before update on public.users
-    for each row execute procedure moddatetime('updated_at');
+    for each row execute procedure extensions.moddatetime('updated_at');

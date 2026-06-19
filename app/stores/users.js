@@ -4,14 +4,19 @@ import User from "../models/User";
 export const useUsersStore = createSupaStore('users', User, Users, ({ item, items }) => {
   const profile = ref(null);
 
-  async function loadProfile() {
+  // Pass `refresh: true` to bypass both the in-memory ref AND the local-storage
+  // cache and re-fetch the row from the DB (then re-store it). Needed when a
+  // caller suspects the cached profile is stale relative to the DB — e.g. the
+  // onboarding gate, where a pre-onboarding cached row would otherwise re-show
+  // the mandatory modal forever. Default (false) keeps the cheap cached path.
+  async function loadProfile(refresh = false) {
     try {
-      if (profile.value) return profile.value;
+      if (profile.value && !refresh) return profile.value;
       const client = useSupabaseClient();
       const { data: { user: authUser } } = await client.auth.getUser();
       const user_id = authUser?.id;
       if (!user_id) return null;
-      let user = await User.profile(user_id);
+      let user = refresh ? await User.load(user_id) : await User.profile(user_id);
       if (user?.id) {
         await user.store();
       } else {
@@ -59,8 +64,15 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
       consoleLog("UsersStore.userSignup", name, email);
       let user = await User.signup(email, password, name);
       if (user) {
-        user.name = name;
-        user = await user.save();
+        // The public.users profile row is created server-side by the
+        // signup_user trigger (synchronous with the auth.users insert), so
+        // there's no client-side insert here — that step used to race the
+        // session + the authenticated-only RLS policy and fail signup even
+        // though the auth account was created. Reload the row so the cached
+        // profile matches the DB (the users SELECT policy allows the read);
+        // best-effort, falling back to the auth-derived user if it lags.
+        const full = await User.load(user.id).catch(() => null);
+        user = full ?? user;
         user = await user.store();
       }
       profile.value = user;
