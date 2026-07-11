@@ -104,8 +104,12 @@ export default class SupaModel extends Model {
     }
     let { data: row, error } = await query.maybeSingle();
     if (error) {
-      consoleWarn("SupaModel.findModel", modelClass.name, error);
-      return null;
+      // maybeSingle() returns null data (no error) when no row matches, so any
+      // error here is genuine — throw it (like the write methods) so a caller /
+      // page can tell "the read failed" from "the record doesn't exist" instead
+      // of the failure silently reading as "not found".
+      consoleError("SupaModel.findModel", modelClass.name, error);
+      throw error;
     }
     if (row) {
       consoleLog("SupaModel.findModel", modelClass.name, row);
@@ -193,8 +197,11 @@ export default class SupaModel extends Model {
 
   // Fetches a single row from table matching all where conditions (AND).
   // where is a plain object: { id: '123', email: 'alice@example.com' }.
-  // Returns a hydrated modelClass instance, or null if not found or on error.
-  // PGRST116 (no rows) is silently ignored; all other errors are logged.
+  // Returns a hydrated modelClass instance, or null when no row matches.
+  // PGRST116 (no rows) returns null (a legitimate "not found"); any OTHER error
+  // is genuine and is thrown (like the write methods) so a caller / page can
+  // tell "the read failed" (show an error/retry) from "the row doesn't exist"
+  // instead of a failure silently reading as "not found".
   static async loadModel(modelClass, table, where = {}) {
     const Supabase = useSupabaseClient();
     let query = Supabase.from(table).select("*");
@@ -204,10 +211,9 @@ export default class SupaModel extends Model {
     }
     let { data: row, error } = await query.single();
     if (error) {
-      if (error.code != "PGRST116") {
-        consoleWarn("SupaModel.loadModel", modelClass.name, error);
-      }
-      return null;
+      if (error.code == "PGRST116") return null;
+      consoleError("SupaModel.loadModel", modelClass.name, error);
+      throw error;
     }
     else if (row) {
       consoleLog("SupaModel.loadModel", modelClass.name, row);
@@ -264,11 +270,14 @@ export default class SupaModel extends Model {
     const keys = where ? Object.keys(where) : [];
     if (keys && keys.length > 0) {
       const Supabase = useSupabaseClient();
-      let query = Supabase.from(table);
+      // .delete() must come BEFORE the filters — .eq() lives on the builder
+      // returned by .delete(), not on .from(table) itself (supabase-js v2).
+      // Same order as loadModel (.select().eq()) / saveModel (.upsert().eq()).
+      let query = Supabase.from(table).delete();
       for (let key of keys) {
         query = query.eq(key, where[key]);
       }
-      const { error } = await query.delete();
+      const { error } = await query;
       if (error) {
         consoleError("SupaModel.deleteModel", modelClass.name, error);
         return false;

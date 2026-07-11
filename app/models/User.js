@@ -197,15 +197,25 @@ export default class User extends SupaModel {
     }
     if (auth?.user) {
       consoleLog("User.signup", auth);
+      // Only mark authenticated when a real session came back. With email
+      // confirmation enabled, signUp() returns a user with a NULL session —
+      // flipping the auth flag + navigating would land the user in a JWT-less
+      // app where every RLS read fails silently. When there's no session,
+      // signal "confirmation pending" so the caller shows a check-your-email
+      // state instead of navigating into a broken authenticated shell.
+      const hasSession = !!auth.session;
       // Update synchronously so callers that navigate immediately (e.g.
       // showPageIndex) see the authenticated tab set on the first read.
-      setAuthenticated(true);
+      if (hasSession) setAuthenticated(true);
       let user = new User();
       user.id = auth.user.id;
       user.email = auth.user.email;
       user.name = name;
       user.created_at = auth.user.created_at;
       user.updated_at = auth.user.updated_at;
+      // Transient (non-persisted) flag — true when the account was created but
+      // needs email confirmation before a session exists.
+      user.confirmationPending = !hasSession;
       return user;
     }
     return null;

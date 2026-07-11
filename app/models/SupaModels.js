@@ -63,7 +63,10 @@ export default class SupaModels extends Models {
 
   // Returns the total count of rows in tableName matching the given where clauses.
   // where — array of [column, operator, value] triples (same format as loadModels).
-  // Returns 0 on error.
+  // Throws on a genuine Supabase error (a count of zero is a valid result, not an
+  // error) so callers can tell "no rows" from "the read failed" — mirroring the
+  // write methods, which already throw. Stores re-reject, so pages can branch on
+  // error vs empty instead of a failure masquerading as an empty table.
   static async countModels(tableName, where = []) {
     const Supabase = useSupabaseClient();
     let query = this.applyWhereClauses(
@@ -73,7 +76,7 @@ export default class SupaModels extends Models {
     const { count, error } = await query;
     if (error) {
       consoleError("SupaModels.countModels", tableName, error);
-      return 0;
+      throw error;
     }
     return count ?? 0;
   }
@@ -105,7 +108,12 @@ export default class SupaModels extends Models {
   //   transform — optional function(row) => modelClass instance, for when rows need
   //               reshaping before hydration (e.g. joining awards → Badge instances)
   //
-  // Returns an empty collection on error (never null).
+  // Returns a collectionClass instance (empty when no rows match — that is a
+  // valid result, not an error). Throws on a genuine Supabase error, mirroring
+  // the write methods (saveModels/deleteModels already throw). Stores re-reject
+  // on the thrown error, so a page can distinguish "the read failed" (show an
+  // error/retry) from "there are no rows" (show an empty state) instead of a
+  // failure silently masquerading as an empty table.
   static async loadModels(collectionClass, modelClass, tableName, { select = '*', limit = 10, offset = 0, where = [], order = null, or = null, transform = null } = {}) {
     const Supabase = useSupabaseClient();
     let collection = new collectionClass();
@@ -124,6 +132,7 @@ export default class SupaModels extends Models {
     const { data: rows, error } = await query;
     if (error) {
       consoleError("SupaModels.loadModels", collectionClass.name, error);
+      throw error;
     }
     else if (rows && rows.length > 0) {
       consoleLog("SupaModels.loadModels", collectionClass.name, rows);

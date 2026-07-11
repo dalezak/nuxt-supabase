@@ -63,7 +63,7 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
     try {
       consoleLog("UsersStore.userSignup", name, email);
       let user = await User.signup(email, password, name);
-      if (user) {
+      if (user && !user.confirmationPending) {
         // The public.users profile row is created server-side by the
         // signup_user trigger (synchronous with the auth.users insert), so
         // there's no client-side insert here — that step used to race the
@@ -71,11 +71,13 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
         // though the auth account was created. Reload the row so the cached
         // profile matches the DB (the users SELECT policy allows the read);
         // best-effort, falling back to the auth-derived user if it lags.
+        // Skipped when confirmation is pending — there's no session yet, so
+        // the read would fail and there's no authenticated profile to cache.
         const full = await User.load(user.id).catch(() => null);
         user = full ?? user;
         user = await user.store();
+        profile.value = user;
       }
-      profile.value = user;
       return user;
     } catch (error) {
       consoleError("UsersStore.userSignup", error);
@@ -98,7 +100,12 @@ export const useUsersStore = createSupaStore('users', User, Users, ({ item, item
 
   async function resetPassword({ email }) {
     try {
-      await User.resetPassword(email);
+      // User.resetPassword returns false on failure rather than throwing, so
+      // reject on a falsy result — otherwise callers can't tell a failed
+      // request from a successful one and show a false "check your email".
+      const ok = await User.resetPassword(email);
+      if (!ok) return Promise.reject(new Error("Password reset request failed"));
+      return ok;
     } catch (error) {
       consoleError("UsersStore.resetPassword", error);
       return Promise.reject(error);
