@@ -21,7 +21,7 @@ export class Storage {
       try {
         this.unstorage = createStorage({
           driver: indexedDbDriver({
-            storeName: name || this.configAppName()
+            storeName: name || this.configStoreName()
           })
         });
       }
@@ -167,6 +167,44 @@ export class Storage {
       return config.public.app.name;
     }
     return null;
+  }
+
+  // The IndexedDB store is namespaced by app AND by the Supabase project the
+  // rows came from.
+  //
+  // Cached catalogs (capacities, quotes, courses…) hold DATABASE IDS. Keyed by
+  // app name alone, one cache is shared by every backend the app has ever
+  // pointed at — so switching between local and the hosted dev project, or
+  // running `supabase db reset` where a seed uses gen_random_uuid(), leaves the
+  // app holding ids that no longer exist anywhere. It reads fine (the labels are
+  // right) and only fails at WRITE time, as a foreign-key violation on whatever
+  // the user picked. love-well hit exactly that: a direction with a capacity
+  // selected could not be saved, while one without saved fine.
+  //
+  // Changing the store name orphans the old cache rather than migrating it,
+  // which is the point — stale ids should not survive a backend change. The
+  // catalogs refetch on next load.
+  configStoreName() {
+    const app = this.configAppName();
+    const project = this.configProjectRef();
+    return project ? `${app}-${project}` : app;
+  }
+
+  // Short, stable id for the current backend: the project ref for a hosted
+  // Supabase URL (rowkfdei….supabase.co → rowkfdei…), the dotted host for a
+  // local/LAN one (10.0.0.144 → 10-0-0-144). Null when unavailable, so the
+  // store name simply falls back to the app name.
+  configProjectRef() {
+    try {
+      const config = useRuntimeConfig();
+      const url = config?.public?.supabase?.url;
+      if (!url) return null;
+      const host = new URL(url).hostname;
+      return host.endsWith('.supabase.co') ? host.split('.')[0] : host.replace(/[.:]/g, '-');
+    }
+    catch (error) {
+      return null;
+    }
   }
 
 }

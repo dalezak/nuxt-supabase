@@ -1,3 +1,4 @@
+import { leafOutline, ribbonOutline, rocketOutline } from 'ionicons/icons';
 // Generic activity-formatter dispatch. Apps with activity feeds (friends'
 // recent actions, group activity, etc.) declare their own activity types
 // and pass them in as a typesMap. The composable returns formatter functions
@@ -6,7 +7,7 @@
 // typesMap shape:
 //   {
 //     [typeKey]: {
-//       icon:     IconConstant,           // e.g. ioniconsRocketOutline
+//       icon:     IconConstant,           // e.g. rocketOutline
 //       color:    string,                 // e.g. 'primary' | 'warning'
 //       describe: (item) => string,       // human-readable description
 //     }
@@ -15,12 +16,12 @@
 // Example (caller side):
 //   const ACTIVITY_TYPES = {
 //     reflected: {
-//       icon: ioniconsLeafOutline,
+//       icon: leafOutline,
 //       color: 'primary',
 //       describe: (i) => `${i.user?.name} reflected on ${i.habit?.framing}`,
 //     },
 //     awarded: {
-//       icon: ioniconsRibbonOutline,
+//       icon: ribbonOutline,
 //       color: 'warning',
 //       describe: (i) => `${i.user?.name} earned ${i.badge?.name}`,
 //     },

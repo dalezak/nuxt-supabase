@@ -2,7 +2,7 @@
 // Generic Supabase sync for any app that extends the nuxt-* layers.
 //
 // Run it FROM an app directory (it uses `process.cwd()` as the app root):
-//   "supabase": "node ../nuxt-supabase/scripts/sync-supabase.mjs"
+//   "supabase:copy": "node ../nuxt-supabase/scripts/sync-supabase.mjs"
 // then `supabase db reset` to apply.
 //
 // What it does:
@@ -16,7 +16,7 @@
 //      IS the namespace — so this is collision-free; a same-name/different-
 //      content clash is loudly warned (and is a convention violation to fix).
 //   3. Applies the app's per-app choices from a `"supabaseSync"` field in its
-//      `package.json` — kept beside the `"supabase"` script that runs this:
+//      `package.json` — kept beside the `"supabase:copy"` script that runs this:
 //        "supabaseSync": {
 //          // per-function edge functions to adopt from layers — each source
 //          // dir's *.ts copies into `supabase/functions/<dir-name>/`. Explicit

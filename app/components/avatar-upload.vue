@@ -73,7 +73,7 @@ async function onChange(event) {
 watch(() => props.user, (u) => { if (u) resolveAvatar(); }, { immediate: true });
 </script>
 
-<style scoped>
+<style lang="scss">
 .avatar-upload {
   display: inline-block;
   position: relative;
@@ -85,7 +85,7 @@ watch(() => props.user, (u) => { if (u) resolveAvatar(); }, { immediate: true })
   width: 80px;
   height: 80px;
 }
-.avatar-overlay {
+.avatar-upload .avatar-overlay {
   position: absolute;
   inset: 0;
   border-radius: 50%;
