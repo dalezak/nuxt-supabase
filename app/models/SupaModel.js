@@ -230,6 +230,15 @@ export default class SupaModel extends Model {
   // If this.id is null/undefined: inserts a new row.
   // Returns a freshly hydrated modelClass instance from the DB response,
   // or null on error.
+  // THROWS on a Supabase error, like updateModel / upsertModel / deleteModel.
+  //
+  // It used to log and return null instead, and that silence cost real data: a
+  // caller doing `const saved = await row.save(); showToast('Saved')` reported
+  // success over a write that never happened, closed its modal, and the row was
+  // simply gone. Callers that want the old behaviour should catch, so the
+  // swallowing is written down at the call site rather than hidden in here.
+  //
+  // Returning null still means "no error, but no row came back".
   async saveModel(modelClass, table, attributes = [], keys = ['id']) {
     const Supabase = useSupabaseClient();
     let values = this.getValues(attributes);
@@ -241,6 +250,7 @@ export default class SupaModel extends Model {
       const { data, error } = await query.select()
       if (error) {
         consoleError("SupaModel.saveModel", modelClass.name, error);
+        throw error;
       }
       else if (data) {
         consoleLog("SupaModel.saveModel", modelClass.name, data.at(0));
@@ -253,6 +263,7 @@ export default class SupaModel extends Model {
       const { data: row, error } = await Supabase.from(table).insert(values).select();
       if (error) {
         consoleError("SupaModel.saveModel", modelClass.name, error);
+        throw error;
       }
       else if (row) {
         consoleLog("SupaModel.saveModel", modelClass.name, row.at(0));

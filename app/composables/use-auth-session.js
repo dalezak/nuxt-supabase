@@ -6,6 +6,10 @@
 //     refresh, session expiry, OAuth callback)
 const _isAuthenticated = ref(false);
 let _initialized = false;
+// Resolves once the PERSISTED session has been determined on cold launch (see
+// `ready()` below). Lets callers (the auth middleware) wait before deciding
+// public vs private, so a launch doesn't flash a public page then correct.
+let _ready = null;
 
 // Synchronous setter for callers that just completed a login/signup/logout and
 // can't afford to wait for Supabase's onAuthStateChange event (which fires a
@@ -32,8 +36,21 @@ export function useAuthSession() {
       supabase.auth.onAuthStateChange((_event, session) => {
         _isAuthenticated.value = !!session?.user;
       });
+      // Cold launch (Capacitor / static SPA) restores the persisted session from
+      // storage ASYNCHRONOUSLY — `user.value` is null on the first pass, so a
+      // naive read says "logged out" and the app shows a public page before
+      // correcting to a private tab (the launch flash). Determine the session up
+      // front; `ready()` lets the auth middleware await this before it decides
+      // public vs private, so the first paint is already correct.
+      _ready = supabase.auth.getSession()
+        .then(({ data }) => { _isAuthenticated.value = !!data.session?.user; })
+        .catch(() => { /* no / invalid persisted session — treat as logged out */ });
+    } else {
+      _ready = Promise.resolve();
     }
   }
 
-  return { isAuthenticated: _isAuthenticated };
+  // `ready()` — await the initial persisted-session determination (a resolved
+  // no-op after the first pass, so it never delays later navigations).
+  return { isAuthenticated: _isAuthenticated, ready: () => _ready ?? Promise.resolve() };
 }
