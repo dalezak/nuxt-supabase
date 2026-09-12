@@ -12,7 +12,7 @@
 --   p_name      — cron job name (must be unique within `cron.job`)
 --   p_cadence   — standard 5-field cron expression
 --   p_function  — Edge Function name; the helper builds
---                 `current_setting('app.supabase_url') || '/functions/v1/' || p_function`
+--                 `public.app_secret('supabase_url') || '/functions/v1/' || p_function`
 --                 with a service-role bearer header
 --
 -- Local dev (no `pg_cron` available) skips gracefully — same migration
@@ -28,6 +28,77 @@ begin
   if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
     create extension if not exists pg_cron;
     create extension if not exists pg_net;
+  end if;
+end;
+$$;
+
+-- Config lookup for the two values every scheduled Edge Function call needs:
+-- the project URL and a service-role bearer token.
+--
+-- Reads Supabase Vault first, falling back to an `app.<name>` GUC. Vault is
+-- the primary because custom GUCs CANNOT be set on hosted Supabase at all —
+-- the `postgres` role isn't a superuser there, so `alter database ... set
+-- app.x`, `alter role ... set app.x`, and the in-database variant are all
+-- refused, including from the dashboard SQL editor (which runs as the same
+-- role). Only local, where `supabase_admin` is reachable, can set them. The
+-- GUC fallback exists so databases already configured that way keep working.
+--
+-- Raises rather than returning null when neither store has the value: the
+-- previous behaviour was a bare `current_setting('app.supabase_url')`, whose
+-- "unrecognized configuration parameter" error surfaced only in
+-- `cron.job_run_details` — every cron on the project failed once a minute,
+-- silently, for as long as the setting was missing.
+create or replace function public.app_secret(p_name text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_value text;
+begin
+  -- Dynamic SQL so the function body doesn't hard-depend on the vault schema
+  -- existing (it's resolved at call time, not creation time).
+  if to_regclass('vault.decrypted_secrets') is not null then
+    execute 'select decrypted_secret from vault.decrypted_secrets where name = $1 limit 1'
+      into v_value using p_name;
+  end if;
+
+  if v_value is null or v_value = '' then
+    v_value := current_setting('app.' || p_name, true);
+  end if;
+
+  if v_value is null or v_value = '' then
+    raise exception
+      '% is not configured — add a Vault secret named % (see scripts/set-secrets.sh)',
+      p_name, p_name;
+  end if;
+
+  return v_value;
+end;
+$$;
+
+-- Writer counterpart, so configuring an environment is one call per value and
+-- the create-vs-update branch lives in SQL rather than in a shell script.
+-- Vault rejects duplicate names, hence the upsert.
+create or replace function public.set_app_secret(p_name text, p_value text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  if to_regclass('vault.secrets') is null then
+    raise exception 'set_app_secret: Supabase Vault is unavailable in this database';
+  end if;
+
+  select id into v_id from vault.secrets where name = p_name;
+  if v_id is null then
+    perform vault.create_secret(p_value, p_name, 'Set by scripts/set-secrets.sh');
+  else
+    perform vault.update_secret(v_id, p_value, p_name, 'Set by scripts/set-secrets.sh');
   end if;
 end;
 $$;
@@ -49,10 +120,10 @@ begin
     p_cadence,
     format(
       $cmd$select net.http_post(
-        url := current_setting('app.supabase_url') || '/functions/v1/%s',
+        url := public.app_secret('supabase_url') || '/functions/v1/%s',
         headers := jsonb_build_object(
           'Content-Type', 'application/json',
-          'Authorization', 'Bearer ' || current_setting('app.supabase_service_role_key')
+          'Authorization', 'Bearer ' || public.app_secret('supabase_service_role_key')
         ),
         body := '{}'::jsonb
       )$cmd$,
