@@ -98,6 +98,67 @@ export async function verifyAuth(req: Request): Promise<AuthOk | AuthFail> {
 //   if (limited) return limited;
 //
 // Caller customises the user-facing 429 message via the optional 4th arg.
+//
+// ── THE WINDOW IS A CALENDAR DAY, IN THE USER'S TIMEZONE ─────────────────────
+// It used to be a rolling 24 hours, which is a defensible cap and a terrible
+// promise: every message the user is shown says the limit "resets in the
+// morning", and under a rolling window nothing happens in the morning. Hit the
+// cap at 21:40 and you get one message back at 21:40 the next EVENING. Someone
+// who reads the alert, waits until breakfast and finds themselves still blocked
+// has been told something untrue by their own app.
+//
+// A day also just means more to a person than a trailing window. "25 a day"
+// that turns out to mean "25 in any 24 hours" is the kind of surprise that
+// reads as the product being sly about it.
+//
+// Timezone comes from `notifications.timezone`, the same source the paced
+// learning and week-strip day boundaries use, so "today" means one thing across
+// the whole app. No row, or an unusable zone, falls back to UTC midnight —
+// still a calendar day, just not the user's.
+// The instant the user's current local day began, as an ISO string.
+//
+// Deriving it via `Intl` rather than a date library: read the wall clock in the
+// target zone, measure how far that is from true UTC, and shift local midnight
+// by the same amount. That handles DST without a table, because the offset is
+// measured at the moment in question rather than assumed.
+export async function startOfUserDay(supabaseAdmin: any, userId: string): Promise<string> {
+  let zone = "UTC";
+  try {
+    const { data } = await supabaseAdmin
+      .from("notifications")
+      .select("timezone")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (data?.timezone) zone = data.timezone;
+  } catch {
+    // A failed preferences read must never block the call it is gating.
+  }
+  try {
+    const now = new Date();
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: zone,
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
+        hour12: false,
+      }).formatToParts(now).map((p) => [p.type, p.value]),
+    ) as Record<string, string>;
+
+    const wall = Date.UTC(
+      +parts.year, +parts.month - 1, +parts.day,
+      +parts.hour, +parts.minute, +parts.second,
+    );
+    // Sub-second noise only — the wall clock is read to the second.
+    const offset = Math.round((wall - now.getTime()) / 1000) * 1000;
+    const midnight = Date.UTC(+parts.year, +parts.month - 1, +parts.day, 0, 0, 0);
+    return new Date(midnight - offset).toISOString();
+  } catch {
+    // An unrecognised IANA zone throws in Intl. Fall back to UTC midnight.
+    const d = new Date();
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())).toISOString();
+  }
+}
+
 export async function enforceRateLimit(
   supabaseAdmin: any,
   userId: string,
@@ -105,7 +166,7 @@ export async function enforceRateLimit(
   perDay: number,
   errorMessage = "Daily limit reached. Try again tomorrow.",
 ): Promise<Response | null> {
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = await startOfUserDay(supabaseAdmin, userId);
   const { count } = await supabaseAdmin
     .from("ai_usage")
     .select("*", { count: "exact", head: true })
