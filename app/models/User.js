@@ -133,7 +133,20 @@ export default class User extends SupaModel {
   // falls back to Supabase (load). Returns null if user_id is falsy.
   static async profile(user_id) {
     if (!user_id) return null;
-    let user = await User.restore(user_id) || await User.load(user_id);
+    // Null on failure, never a throw — this method's contract, and the one
+    // `loadProfile()` relies on from nearly every page in the app.
+    //
+    // `loadModel` throws on a Supabase error now, so an unguarded read here
+    // turned any transient failure into an exception on whichever page happened
+    // to be loading. A missing profile is a state the callers already handle; a
+    // rejected promise is not.
+    let user = null;
+    try {
+      user = await User.restore(user_id) || await User.load(user_id);
+    } catch (error) {
+      consoleError("User.profile", error);
+      return null;
+    }
     consoleLog("User.profile", user);
     return user;
   }
@@ -161,7 +174,25 @@ export default class User extends SupaModel {
       // Update synchronously so callers that navigate immediately (e.g.
       // showPageIndex) see the authenticated tab set on the first read.
       setAuthenticated(true);
-      const full = await User.load(auth.user.id);
+      // The profile read must never be able to defeat a SUCCESSFUL
+      // authentication. `loadModel` throws on a Supabase error now (it used to
+      // log and return null), and this call sat outside any catch — so a
+      // transient read failure propagated out of `login()` and presented as
+      // "wrong password", with the fallback directly below it never running.
+      //
+      // A fresh login is exactly when that read is most fragile: the session
+      // has only just been established, so a query against an owner-scoped
+      // table can still run before it is attached.
+      //
+      // Auth is the thing that decides whether you are logged in. The profile
+      // row is a nicety, and there is already a documented fallback for not
+      // having it.
+      let full = null;
+      try {
+        full = await User.load(auth.user.id);
+      } catch (loadError) {
+        consoleError("User.login profile read", loadError);
+      }
       if (full) return full;
       // Fallback to auth metadata if the users row isn't there yet (edge
       // case: auth account created out-of-band before the profile row).
