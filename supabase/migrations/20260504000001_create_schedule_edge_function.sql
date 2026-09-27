@@ -132,3 +132,15 @@ begin
   );
 end;
 $$;
+
+-- ── Lock the secret + scheduling surface down to the server ────────────────
+-- Postgres grants EXECUTE to PUBLIC on every new function, PostgREST exposes
+-- the public schema, and anon / authenticated are members of PUBLIC — so
+-- without this block anyone holding the (public) anon key could call
+-- `rpc/app_secret` and read the service-role key, or `set_app_secret` /
+-- `schedule_edge_function` to repoint every cron and pg_net call. These
+-- functions are only ever invoked from other SECURITY DEFINER SQL (which runs
+-- as the definer) and from cron (postgres), neither of which this touches.
+revoke all on function public.app_secret(text) from public, anon, authenticated;
+revoke all on function public.set_app_secret(text, text) from public, anon, authenticated;
+revoke all on function public.schedule_edge_function(text, text, text) from public, anon, authenticated;

@@ -53,10 +53,21 @@ export type ServiceRoleOk = {
   supabaseAdmin: any;
 };
 
+// Constant-time string compare for secrets (a plain `!==` short-circuits on
+// the first differing byte, which leaks the prefix length over timing).
+export function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const x = enc.encode(a), y = enc.encode(b);
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
+}
+
 export function verifyServiceRole(req: Request): ServiceRoleOk | AuthFail {
-  const auth = req.headers.get("Authorization");
+  const auth = req.headers.get("Authorization") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  if (auth !== `Bearer ${serviceKey}`) {
+  if (!timingSafeEqual(auth, `Bearer ${serviceKey}`)) {
     return { ok: false, response: errorResponse("Unauthorized", 401) };
   }
   const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
@@ -182,6 +193,28 @@ export async function enforceRateLimit(
   return null;
 }
 
+// Count-only daily cap: 429 when the user already has `perDay` `ai_usage`
+// rows under `functionName` in the last 24h. Unlike enforceRateLimit it does
+// NOT insert — pair it with recordAiUsage, which writes the row (with tokens
+// and cost) after the call, so the cap and the cost log share one row.
+export async function enforceDailyCap(
+  supabaseAdmin: any,
+  userId: string,
+  functionName: string,
+  perDay: number,
+  errorMessage = "Daily limit reached. Try again tomorrow.",
+): Promise<Response | null> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await supabaseAdmin
+    .from("ai_usage")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("function_name", functionName)
+    .gte("created_at", cutoff);
+  if ((count ?? 0) >= perDay) return errorResponse(errorMessage, 429);
+  return null;
+}
+
 // Enforce a per-user-per-calendar-month AI budget across ALL functions for
 // a user. Counts every row in `ai_usage` for the user since the start of
 // the current month (UTC), regardless of `function_name`. The budget is a
@@ -199,23 +232,59 @@ export async function enforceRateLimit(
 //   if (overBudget) return overBudget;
 //   const limited = await enforceRateLimit(supabaseAdmin, user.id, FUNCTION_NAME, 30);
 //   if (limited) return limited;
+//
+// `functionName` narrows the count to one `function_name`. Now that every AI
+// call logs a row (recordAiUsage in ai-usage.ts — enrich, distill, grading…),
+// a budget that means "courses per month" must count only the generation rows,
+// not every call the course went on to make.
 export async function enforceMonthlyBudget(
   supabaseAdmin: any,
   userId: string,
   perMonth: number,
   errorMessage = "Monthly AI limit reached. Upgrade your plan for more.",
+  functionName: string | null = null,
 ): Promise<Response | null> {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-  const { count } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("ai_usage")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
     .gte("created_at", monthStart);
+  if (functionName) query = query.eq("function_name", functionName);
+  const { count } = await query;
   if ((count ?? 0) >= perMonth) {
     return errorResponse(errorMessage, 429);
   }
   return null;
+}
+
+// Run `fn` over `items` with at most `limit` in flight, never rejecting: a
+// failed item logs and yields null so one bad push (a non-JSON error page, a
+// throttled invocation) can't reject the whole batch. For the notify
+// dispatchers, which used to `Promise.all` one fetch per recipient — 800 due
+// reminders meant 800 concurrent invocations, and a single failure lost the
+// entire run after the picker had already marked everything sent.
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<(R | null)[]> {
+  const out: (R | null)[] = new Array(items.length).fill(null);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        out[i] = await fn(items[i]);
+      } catch (err) {
+        console.error("mapWithConcurrency: item failed", err);
+        out[i] = null;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  return out;
 }
 
 // Wrap an Edge Function handler with CORS preflight + try/catch error
@@ -229,8 +298,10 @@ export function serveEdge(handler: (req: Request) => Promise<Response>) {
     try {
       return await handler(req);
     } catch (error) {
+      // Log the detail, return a generic message: an uncaught Postgres or SDK
+      // error carries constraint / column names the client has no use for.
       console.error("edge function error:", error);
-      return errorResponse(error instanceof Error ? error.message : "Unknown error");
+      return errorResponse("Something went wrong. Please try again.");
     }
   });
 }
