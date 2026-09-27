@@ -4,11 +4,28 @@
 // client construction, API call, max_tokens detection, and text-block
 // extraction. Keep prompts in the consuming app — they're domain-specific.
 //
-// Default model is claude-opus-4-7 (latest); callers should override per
+// Default model is claude-opus-5 (latest); callers should override per
 // task (e.g. Haiku for validation, Sonnet for medium-complexity content).
 //
 // Thinking is opt-in via `thinking: { type: "adaptive" }` — match the
-// Anthropic SDK's behavior exactly.
+// Anthropic SDK's behavior exactly. `effort` tunes how much a thinking model
+// reasons (Sonnet 5 / Opus 5 think by default — pass `effort: "low"` for
+// bulk content generation where reasoning adds cost, not quality).
+//
+// `format` — a JSON schema for structured outputs (`output_config.format`):
+// the response text is then guaranteed to parse and match the schema, so
+// callers can drop their retry-on-invalid-JSON paths. Every object needs
+// `additionalProperties: false`; see the Anthropic structured-outputs docs
+// for the supported subset.
+//
+// `cacheSystem` — wraps the system prompt in a cache_control block so a
+// prompt reused across calls (a per-lesson generator) is billed at the
+// cache-read rate after the first call. Only effective above the model's
+// minimum cacheable prefix (1024 tokens on Sonnet 5 / Opus 5, 4096 on
+// Haiku 4.5) — below it the flag is harmless but does nothing.
+//
+// The result carries `usage` (token counts, cache read/write) and the model
+// actually used, so callers can record cost — see ai-usage.ts.
 //
 // Two calling styles, pick whichever fits:
 //
@@ -47,13 +64,26 @@ export type ClaudeCallOptions = {
   max_tokens?: number;
   thinking?: { type: "adaptive" | "disabled" };
   effort?: "low" | "medium" | "high" | "max" | "xhigh";
+  // JSON schema for structured outputs (output_config.format).
+  format?: Record<string, unknown>;
+  // Cache the system prompt across calls (prompt caching).
+  cacheSystem?: boolean;
   apiKey?: string;
+};
+
+export type ClaudeUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
 };
 
 export type ClaudeCallResult = {
   text: string;
   raw: any;
   truncated: boolean;
+  model: string;
+  usage: ClaudeUsage;
 };
 
 export async function callClaude(options: ClaudeCallOptions): Promise<ClaudeCallResult> {
@@ -73,24 +103,40 @@ export async function callClaude(options: ClaudeCallOptions): Promise<ClaudeCall
 
   const anthropic = new Anthropic({ apiKey });
 
+  const model = options.model ?? "claude-opus-5";
   const requestBody: any = {
-    model: options.model ?? "claude-opus-4-7",
+    model,
     max_tokens: options.max_tokens ?? 16000,
-    system: options.system,
+    system: options.cacheSystem
+      ? [{ type: "text", text: options.system, cache_control: { type: "ephemeral" } }]
+      : options.system,
     messages,
   };
   if (options.thinking) requestBody.thinking = options.thinking;
-  if (options.effort) requestBody.output_config = { effort: options.effort };
+  if (options.effort || options.format) {
+    requestBody.output_config = {
+      ...(options.effort ? { effort: options.effort } : {}),
+      ...(options.format ? { format: { type: "json_schema", schema: options.format } } : {}),
+    };
+  }
 
   const message = await anthropic.messages.create(requestBody);
 
   const textBlock = message.content.find((b: any) => b.type === "text");
   const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+  const u: any = message.usage ?? {};
 
   return {
     text,
     raw: message,
     truncated: message.stop_reason === "max_tokens",
+    model: message.model ?? model,
+    usage: {
+      input_tokens: u.input_tokens ?? 0,
+      output_tokens: u.output_tokens ?? 0,
+      cache_read_input_tokens: u.cache_read_input_tokens ?? 0,
+      cache_creation_input_tokens: u.cache_creation_input_tokens ?? 0,
+    },
   };
 }
 
