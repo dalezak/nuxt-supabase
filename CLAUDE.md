@@ -580,7 +580,7 @@ export const useCoursesStore = createSupaStore('courses', Course, Courses, () =>
 
 The `extend` thunk should be thin — each custom action delegates to a static method on the model or collection. Don't put query logic inside the store; put it on the model and call it from here. This keeps stores swappable and models testable.
 
-Stores expose: `item`, `items`, `getItem`, `getItems`, `loadItem`, `loadItems`, `saveItem`, `deleteItem`, `clearItems`, plus whatever the `extend` thunk adds. Use `storeToRefs(store)` in components to keep getters reactive while destructuring actions normally.
+Stores expose: `item`, `items`, `getItem`, `getItems`, `loadItem`, `loadItems`, `saveItem`, `deleteItem`, `clearItems`, plus whatever the `extend` thunk adds. `saveItem(data, extraAttributes = [])` forwards the second argument to the model's `save(extraAttributes)` — the way an app carries a column its own migration added (love-well's `insights.relationship_id`) without shadowing the layer's store; a model whose `save()` takes no arguments ignores it. Use `storeToRefs(store)` in components to keep getters reactive while destructuring actions normally.
 
 ## Naming
 

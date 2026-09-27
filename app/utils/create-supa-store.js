@@ -113,9 +113,13 @@ export function createSupaStore(name, ModelClass, CollectionClass, extend = () =
       }
     }
 
-    async function saveItem(data) {
+    // `extraAttributes` reach the model's `save(extraAttributes)` — the way an
+    // app carries a column its own migration added (love-well's
+    // `insights.relationship_id`) without shadowing the layer's model. Models
+    // whose `save()` takes no arguments ignore it.
+    async function saveItem(data, extraAttributes = []) {
       try {
-        let saved = await new ModelClass(data).save();
+        let saved = await new ModelClass(data).save(extraAttributes);
         if (saved) await saved.store();
         item.value = saved;
         items.value = null;
