@@ -108,6 +108,8 @@ The layer ships reusable boilerplate under `supabase/functions/_shared/`. Apps c
 - `claude.ts` — `callClaude({ model, system, user, max_tokens, thinking, effort })` returns `{ text, raw, truncated }`. Default model is `claude-opus-4-7`; callers override per task. `parseJSON(text)` strips ```json fences and parses.
 - `edge.ts` — `serveEdge(handler)` wraps `Deno.serve` with CORS preflight + try/catch. `verifyAuth(req)` returns `{ ok, user, supabaseAdmin, supabaseUser }` or `{ ok: false, response }` — the latter is a ready-to-return 401. `jsonResponse(data, status)` and `errorResponse(message, status)` build CORS-aware responses.
 
+- `account-data.ts` — the two account-data rights every store-listed app owes (Apple 5.1.1(v), GDPR 17 + 20). `handleDeleteUserAccount(req)` deletes the caller's auth row after an email confirmation, and the `on delete cascade` FKs remove the rest. `handleExportUserData(req, { appName, multiOwnerTables?, exclude? })` downloads every row the caller owns. It finds the tables with `public.user_owned_tables()` (migration `20260701000003`, service-role only), which reads every `user_id` table from the catalog, so the export never drifts from the schema. Apps own the `delete-user-account` / `export-user-data` entry points as one-line wrappers; the client page is nuxt-ionic's `/your-data`.
+
 Apps keep their own prompts and parsing logic in their own `_shared/prompts.ts` (or similar) — the layer only provides the SDK plumbing.
 
 #### Scheduling cron-driven Edge Functions

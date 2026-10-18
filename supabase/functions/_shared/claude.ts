@@ -87,6 +87,29 @@ export type ClaudeCallResult = {
 };
 
 export async function callClaude(options: ClaudeCallOptions): Promise<ClaudeCallResult> {
+  const { anthropic, requestBody, model } = prepareRequest(options);
+  const message = await anthropic.messages.create(requestBody);
+  return toResult(message, model);
+}
+
+// Streaming twin of `callClaude`: `onText` receives each text delta as it
+// arrives, and the promise resolves to the same `ClaudeCallResult` once the
+// message is complete — so a caller can show the reply live and still persist,
+// check truncation and record usage exactly as it would after `callClaude`.
+// `onText` is called synchronously from the SDK's event loop; keep it cheap
+// (enqueue to a stream, don't await work in it).
+export async function streamClaude(
+  options: ClaudeCallOptions,
+  onText: (delta: string) => void,
+): Promise<ClaudeCallResult> {
+  const { anthropic, requestBody, model } = prepareRequest(options);
+  const stream = anthropic.messages.stream(requestBody);
+  stream.on("text", (delta: string) => onText(delta));
+  const message = await stream.finalMessage();
+  return toResult(message, model);
+}
+
+function prepareRequest(options: ClaudeCallOptions) {
   const apiKey = options.apiKey ?? Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
@@ -120,8 +143,10 @@ export async function callClaude(options: ClaudeCallOptions): Promise<ClaudeCall
     };
   }
 
-  const message = await anthropic.messages.create(requestBody);
+  return { anthropic, requestBody, model };
+}
 
+function toResult(message: any, model: string): ClaudeCallResult {
   const textBlock = message.content.find((b: any) => b.type === "text");
   const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
   const u: any = message.usage ?? {};
