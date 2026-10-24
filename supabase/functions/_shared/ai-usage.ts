@@ -69,3 +69,54 @@ export async function recordAiUsage(supabaseAdmin: any, opts: RecordAiUsageOptio
     console.error("recordAiUsage threw:", err);
   }
 }
+
+// Attach a call's tokens + cost to the row `enforceRateLimit` already wrote
+// for this request, instead of inserting another. `enforceRateLimit` writes a
+// bare row (user + function_name) BEFORE the call, and the daily cap and any
+// monthly budget count those rows, so a second row per call would change
+// what every limit means. This keeps one row per request and fills it in.
+//
+// The target is the newest row for (user, function_name) from the last few
+// minutes: the marker is inserted just before the call, so a concurrent
+// request for the same user + function is the only way to hit the wrong one,
+// and then the totals are still right, only split differently. Several calls
+// in one request (a reply + its title) add up on the same row; `model` is the
+// last one's. No marker found (the function has no rate limit) → insert,
+// exactly as `recordAiUsage` does.
+//
+// Prefer passing `usage` to callClaude / callClaudeJSON / streamClaude (see
+// claude.ts), which calls this for you. Never throws, like recordAiUsage.
+const MARKER_WINDOW_MS = 10 * 60 * 1000;
+
+export async function addAiUsage(supabaseAdmin: any, opts: RecordAiUsageOptions): Promise<void> {
+  if (!opts.userId) return;
+  const { model, usage } = opts.result;
+  try {
+    const since = new Date(Date.now() - MARKER_WINDOW_MS).toISOString();
+    const { data: marker } = await supabaseAdmin
+      .from("ai_usage")
+      .select("id, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd")
+      .eq("user_id", opts.userId)
+      .eq("function_name", opts.functionName)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!marker) return await recordAiUsage(supabaseAdmin, opts);
+
+    const cost = estimateCostUsd(model, usage);
+    const { error } = await supabaseAdmin.from("ai_usage").update({
+      model,
+      input_tokens: (marker.input_tokens ?? 0) + usage.input_tokens,
+      output_tokens: (marker.output_tokens ?? 0) + usage.output_tokens,
+      cache_read_tokens: (marker.cache_read_tokens ?? 0) + usage.cache_read_input_tokens,
+      cache_write_tokens: (marker.cache_write_tokens ?? 0) + usage.cache_creation_input_tokens,
+      cost_usd: cost === null ? marker.cost_usd : Number(marker.cost_usd ?? 0) + cost,
+      ...(opts.refType ? { ref_type: opts.refType } : {}),
+      ...(opts.refId ? { ref_id: opts.refId } : {}),
+    }).eq("id", marker.id);
+    if (error) console.error("addAiUsage:", error.message);
+  } catch (err) {
+    console.error("addAiUsage threw:", err);
+  }
+}

@@ -27,6 +27,11 @@
 // The result carries `usage` (token counts, cache read/write) and the model
 // actually used, so callers can record cost — see ai-usage.ts.
 //
+// `usage` (the option) records it for you: pass
+// `{ client: supabaseAdmin, userId, functionName }` and the call's tokens and
+// cost land on the row `enforceRateLimit` wrote for this request (addAiUsage).
+// The only way to cost a callClaudeJSON call, which returns parsed data only.
+//
 // Two calling styles, pick whichever fits:
 //
 // 1. Single-shot — pass `user` as a string. The helper wraps it as one
@@ -49,6 +54,7 @@
 
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { errorResponse } from "./edge.ts";
+import { addAiUsage } from "./ai-usage.ts";
 
 export type ClaudeMessage = {
   role: "user" | "assistant";
@@ -69,7 +75,29 @@ export type ClaudeCallOptions = {
   // Cache the system prompt across calls (prompt caching).
   cacheSystem?: boolean;
   apiKey?: string;
+  // Record this call's tokens + cost after it succeeds (addAiUsage).
+  usage?: ClaudeUsageTarget;
 };
+
+export type ClaudeUsageTarget = {
+  client: any;
+  userId: string | null | undefined;
+  functionName: string;
+  refType?: string;
+  refId?: string | null;
+};
+
+async function recordUsage(options: ClaudeCallOptions, result: ClaudeCallResult) {
+  const target = options.usage;
+  if (!target) return;
+  await addAiUsage(target.client, {
+    userId: target.userId,
+    functionName: target.functionName,
+    result,
+    refType: target.refType,
+    refId: target.refId,
+  });
+}
 
 export type ClaudeUsage = {
   input_tokens: number;
@@ -89,7 +117,9 @@ export type ClaudeCallResult = {
 export async function callClaude(options: ClaudeCallOptions): Promise<ClaudeCallResult> {
   const { anthropic, requestBody, model } = prepareRequest(options);
   const message = await anthropic.messages.create(requestBody);
-  return toResult(message, model);
+  const result = toResult(message, model);
+  await recordUsage(options, result);
+  return result;
 }
 
 // Streaming twin of `callClaude`: `onText` receives each text delta as it
@@ -106,7 +136,9 @@ export async function streamClaude(
   const stream = anthropic.messages.stream(requestBody);
   stream.on("text", (delta: string) => onText(delta));
   const message = await stream.finalMessage();
-  return toResult(message, model);
+  const result = toResult(message, model);
+  await recordUsage(options, result);
+  return result;
 }
 
 function prepareRequest(options: ClaudeCallOptions) {
