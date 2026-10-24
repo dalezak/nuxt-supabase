@@ -41,3 +41,25 @@ alter default privileges in schema public
   grant select, insert, update, delete on tables to authenticated, service_role;
 alter default privileges in schema public
   grant usage, select on sequences to anon, authenticated, service_role;
+
+-- Functions: signed-in callers and the service role, never `anon`. Postgres
+-- otherwise grants EXECUTE on every new function to PUBLIC, so a SECURITY
+-- DEFINER helper that takes a user id (`partner_recent_activity(p_user_id)`)
+-- was callable over the API by anyone holding the public anon key. RLS helper
+-- functions keep working — policies run as the signed-in caller, who still
+-- has EXECUTE. Trigger functions need no grant at all. A function meant only
+-- for the service role (cron recipients) revokes `authenticated` in its own
+-- migration.
+--
+-- The revoke is GLOBAL (no `in schema`): Postgres lets a per-schema default
+-- only ADD privileges, never remove what the global default grants, and the
+-- global default is what hands every new function to PUBLIC.
+alter default privileges
+  revoke execute on functions from public;
+-- Hosted Supabase ALSO grants `anon` per schema (a `public` default the
+-- local stack doesn't have), so that grant needs its own revoke — without it
+-- dev still let anon run every security definer function.
+alter default privileges in schema public
+  revoke execute on functions from anon;
+alter default privileges in schema public
+  grant execute on functions to authenticated, service_role;

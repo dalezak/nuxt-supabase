@@ -129,6 +129,22 @@ export default class User extends SupaModel {
     return null;
   }
 
+  // Exact-address lookup for invite / connect flows: `{ id, name, email }` as a
+  // User, or null when no account has that address. Goes through the
+  // `users_by_email` RPC because `users` is readable only by its owner (and
+  // the people a layer links them to), so a plain select by email finds
+  // nothing for anyone else.
+  static async findByEmail(email) {
+    const address = String(email ?? '').trim().toLowerCase();
+    if (!address) return null;
+    const { data, error } = await useSupabaseClient().rpc('users_by_email', { p_emails: [address] });
+    if (error) {
+      consoleError('User.findByEmail', error);
+      return null;
+    }
+    return data?.[0] ? new User(data[0]) : null;
+  }
+
   // Loads the current user by user_id: checks local storage first (restore),
   // falls back to Supabase (load). Returns null if user_id is falsy.
   static async profile(user_id) {
