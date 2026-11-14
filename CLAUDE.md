@@ -112,6 +112,8 @@ The layer ships reusable boilerplate under `supabase/functions/_shared/`. Apps c
 
 Apps keep their own prompts and parsing logic in their own `_shared/prompts.ts` (or similar) — the layer only provides the SDK plumbing.
 
+**Bare-call scan after a page rewrite**: `scripts/scan-undefined-calls.cjs <files>` (run from the app root after `nuxi prepare`; apps wire it as `npm run scan:calls`) lists every function a `.vue` file calls that is defined nowhere — not in the file, not an import, not an auto-import. A bare identifier builds clean and throws only at runtime, where a rejected `Promise.all` silently skips every loader after it. Exits non-zero when anything is unaccounted for.
+
 #### Scheduling cron-driven Edge Functions
 
 Any Edge Function meant to run on a fixed cadence (push dispatchers, reconciliation jobs, periodic cleanups) is scheduled via the `schedule_edge_function(name, cadence, function_name)` SQL helper shipped with this layer. One-liner per schedule:
@@ -171,6 +173,7 @@ When uncertain, ask: "Would another app extending this layer want this?" If yes,
 
 - **Nuxt 4 globals**: Use `import.meta.client` / `import.meta.server` instead of the deprecated `process.client` / `process.server`. Use `import.meta.dev` / `import.meta.prod` instead of `process.env.NODE_ENV` checks.
 - **Auto-imports**: Nuxt auto-imports composables (`useStorage`, `useAppUser`, `useAuthSession`, `useProfile`, `useSupabaseClient`, `useSupabaseUser`, `useRuntimeConfig`) and utils (`consoleLog`, `consoleWarn`, `consoleError`, `consoleInfo`, `createSupaStore`, `invokeFunction`, `gravatarUrl`, `isDev`, `isProd`). Do not import these manually in app code.
+- **Day boundaries are LOCAL midnight.** `app/utils/local-day.js`: `localDay(date)` ('YYYY-MM-DD' on the device's calendar), `localDayIndex(date)` (the per-day rotation seed), `localDayOfUtc(ts)` (the local day of a DB timestamp) and `isSameDay(a, b)`. Each accepts a Date, a DB timestamp or a 'YYYY-MM-DD' `date` column (read as a LOCAL date, not UTC midnight). Never `toISOString().slice(0, 10)` for a user's day. `parseTimestamp` and `startOfDay` sit beside it.
 - **Class imports are explicit**. Models, collections, and base classes (`SupaModel`, `SupaModels`, `RestModel`, `RestModels`, `User`, `Users`) are NOT auto-imported — Nuxt only auto-imports composables and utils. Consuming apps reference layer classes via the `#layers/<layer-name>/...` alias (Nuxt 3.16+ / 4.x) — e.g. `import SupaModel from '#layers/nuxt-supabase/app/models/SupaModel'`. The consuming app's own models live in `app/models/` and are imported with `~/models/Course`. **Do not use deep relative paths** (`../../../nuxt-supabase/...`) — they break when files move and read poorly from deeply-nested pages.
 - **Layer name registration is required for external sibling-repo layers.** Nuxt auto-names layers that live in a project-local `layers/` folder, but for layers extended via relative path (`extends: ['../nuxt-supabase']`), each layer MUST declare its own name in its `nuxt.config.ts`:
 
