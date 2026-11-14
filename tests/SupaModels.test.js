@@ -64,12 +64,13 @@ describe('SupaModels.loadModels()', () => {
     expect(collection[1].name).toBe('Bob')
   })
 
-  it('returns an empty collection on error', async () => {
+  // Rejects rather than returning an empty collection, so a page can tell
+  // "the read failed" from "there is nothing yet".
+  it('rejects on error', async () => {
     builder = makeBuilder({ data: null, error: { message: 'DB error' } })
     mockSupabase.from.mockReturnValue(builder)
 
-    const collection = await SupaModels.loadModels(TestCollection, TestModel, 'tests')
-    expect(collection).toHaveLength(0)
+    await expect(SupaModels.loadModels(TestCollection, TestModel, 'tests')).rejects.toMatchObject({ message: 'DB error' })
   })
 
   describe('where clause operators', () => {

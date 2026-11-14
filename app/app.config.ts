@@ -12,4 +12,16 @@ export default defineAppConfig({
   cacheManifest: {
     derivedPrefixes: {},
   },
+
+  // Disclosed in the Privacy Policy (nuxt-ionic's useLegal reads every
+  // layer's `legal.processors`). Every app on this layer stores its data here.
+  legal: {
+    processors: {
+      supabase: {
+        name: 'Supabase',
+        purpose: 'hosts the database, sign-in and file storage that hold your account and everything you save.',
+        url: 'https://supabase.com/privacy',
+      },
+    },
+  },
 })

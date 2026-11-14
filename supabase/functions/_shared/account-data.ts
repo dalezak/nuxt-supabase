@@ -9,6 +9,8 @@
 //   import { handleDeleteUserAccount } from "../_shared/account-data.ts";
 //   import { serveEdge } from "../_shared/edge.ts";
 //   serveEdge(handleDeleteUserAccount);
+//   // …or, with files another layer stores for the user (see Delete below):
+//   serveEdge((req) => handleDeleteUserAccount(req, { cleanup: [deleteUserMeditationAudio] }));
 //
 //   // supabase/functions/export-user-data/index.ts
 //   import { handleExportUserData } from "../_shared/account-data.ts";
@@ -19,6 +21,7 @@
 // functions by these names.
 
 import { corsHeaders, errorResponse, jsonResponse, verifyAuth } from "./edge.ts";
+import { removeStoragePrefix } from "./storage.ts";
 
 // ── Delete ─────────────────────────────────────────────────────────────────
 //
@@ -32,7 +35,28 @@ import { corsHeaders, errorResponse, jsonResponse, verifyAuth } from "./edge.ts"
 // Cascade: every user-content table references `auth.users` with
 // `on delete cascade` (a convention across these layers), so deleting the auth
 // row removes everything. No app-side cascade walk to keep in sync.
-export async function handleDeleteUserAccount(req: Request): Promise<Response> {
+//
+// Files: storage objects are NOT rows, so the cascade never reaches them. The
+// user's avatar folder (`avatars/<user id>/`, written by User.uploadAvatar) is
+// removed here; files another layer or app stores for the user are removed by
+// the `cleanup` functions it passes (e.g. nuxt-meditations'
+// `deleteUserMeditationAudio`). Cleanup runs BEFORE the auth row goes, while
+// the rows that name the files still exist, and any failure stops the delete
+// with a 500. Every step is idempotent, so the user simply tries again; the
+// alternative, an account deleted with its files left behind, is the one
+// outcome the store policies rule out.
+// deno-lint-ignore no-explicit-any
+export type AccountCleanup = (ctx: { userId: string; supabaseAdmin: any }) => Promise<unknown>;
+
+export type DeleteOptions = {
+  // Extra file cleanup, run in order after the avatar folder.
+  cleanup?: AccountCleanup[];
+};
+
+export const deleteUserAvatars: AccountCleanup = ({ userId, supabaseAdmin }) =>
+  removeStoragePrefix(supabaseAdmin, "avatars", `${userId}/`);
+
+export async function handleDeleteUserAccount(req: Request, options: DeleteOptions = {}): Promise<Response> {
   if (req.method !== "POST") return errorResponse("Method not allowed", 405);
 
   const auth = await verifyAuth(req);
@@ -50,6 +74,15 @@ export async function handleDeleteUserAccount(req: Request): Promise<Response> {
   const userEmail = user.email?.toLowerCase();
   if (!confirmation || !userEmail || confirmation !== userEmail) {
     return errorResponse("Confirmation email does not match the account email.", 400);
+  }
+
+  for (const cleanup of [deleteUserAvatars, ...(options.cleanup ?? [])]) {
+    try {
+      await cleanup({ userId: user.id, supabaseAdmin });
+    } catch (error) {
+      console.error("delete-user-account: file cleanup failed", error);
+      return errorResponse("Could not remove your files, so your account is still here. Please try again.", 500);
+    }
   }
 
   const { error } = await supabaseAdmin.auth.admin.deleteUser(user.id);

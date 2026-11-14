@@ -79,14 +79,13 @@ describe('SupaModel.saveModel()', () => {
     expect(builder.eq).toHaveBeenCalledWith('id', 'abc')
   })
 
-  it('returns null and does not throw on error', async () => {
+  // Writes throw rather than return null: a silent null lost real data.
+  it('rejects with the database error', async () => {
     builder = makeBuilder({ data: null, error: { message: 'DB error' } })
     mockSupabase.from.mockReturnValue(builder)
 
     const model = new TestModel({ name: 'Alice' })
-    const result = await model.saveModel(TestModel, 'tests', ['name'])
-
-    expect(result).toBeNull()
+    await expect(model.saveModel(TestModel, 'tests', ['name'])).rejects.toMatchObject({ message: 'DB error' })
   })
 })
 
@@ -123,12 +122,13 @@ describe('SupaModel.loadModel()', () => {
     expect(result).toBeNull()
   })
 
-  it('returns null on other errors', async () => {
+  // Only PGRST116 (no row) means "not found"; any other error rejects, so a
+  // failed read can't pass for a missing one.
+  it('rejects on other errors', async () => {
     builder = makeBuilder({ data: null, error: { code: '500', message: 'Server error' } })
     mockSupabase.from.mockReturnValue(builder)
 
-    const result = await SupaModel.loadModel(TestModel, 'tests', { id: '1' })
-    expect(result).toBeNull()
+    await expect(SupaModel.loadModel(TestModel, 'tests', { id: '1' })).rejects.toMatchObject({ code: '500' })
   })
 })
 
